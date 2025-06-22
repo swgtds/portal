@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -33,6 +34,7 @@ func generateRoomCode() string {
 	rand.Seed(time.Now().UnixNano())
 	return fmt.Sprintf("%06d", rand.Intn(1000000))
 }
+
 func handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	roomID := generateRoomCode()
 
@@ -150,7 +152,7 @@ func broadcastToRoom(roomID string, msg []byte) {
 }
 
 func startRoomCleanup() {
-	ticker := time.NewTicker(1 * time.Minute) // 1 hr cleanup interval
+	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
 		for range ticker.C {
 			now := time.Now()
@@ -175,6 +177,11 @@ func main() {
 
 	startRoomCleanup()
 
-	fmt.Println("Backend running on http://localhost:5000")
-	log.Fatal(http.ListenAndServe(":5000", nil))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5000" // default for local dev
+	}
+
+	log.Printf("Backend running on port %s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
