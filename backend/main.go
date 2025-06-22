@@ -29,7 +29,6 @@ type Room struct {
 var rooms = make(map[string]*Room)
 var roomsLock sync.Mutex
 
-// Generates a random 6-digit room code
 func generateRoomCode() string {
 	rand.Seed(time.Now().UnixNano())
 	return fmt.Sprintf("%06d", rand.Intn(1000000))
@@ -170,16 +169,30 @@ func startRoomCleanup() {
 	}()
 }
 
+func withCORS(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		h(w, r)
+	}
+}
+
 func main() {
-	http.HandleFunc("/create", handleCreateRoom)
-	http.HandleFunc("/exists", handleRoomExists)
-	http.HandleFunc("/ws", handleWebSocket)
+	http.HandleFunc("/create", withCORS(handleCreateRoom))
+	http.HandleFunc("/exists", withCORS(handleRoomExists))
+	http.HandleFunc("/ws", withCORS(handleWebSocket))
 
 	startRoomCleanup()
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "5000" // default for local dev
+		port = "5000"
 	}
 
 	log.Printf("Backend running on port %s", port)
