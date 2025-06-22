@@ -1,18 +1,13 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Hash } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
   const [roomId, setRoomId] = useState('');
-
-  const generateRoomId = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  };
 
   const handleCreateRoom = async () => {
     try {
@@ -29,16 +24,16 @@ const Index = () => {
     }
   };
 
-  const handleJoinRoom = () => {
-    if (roomId.length === 6 && /^\d+$/.test(roomId)) {
-      navigate(`/room/${roomId}`);
-    }
-  };
-
   const handleRoomIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 6);
     setRoomId(value);
   };
+
+  useEffect(() => {
+    if (roomId.length === 6) {
+      navigate(`/room/${roomId}`);
+    }
+  }, [roomId, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-onedark-background via-onedark-background to-onedark-selection flex items-center justify-center p-4 relative overflow-hidden">
@@ -71,7 +66,14 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* Join Room Card */}
+          {/* Divider */}
+          <div className="flex items-center justify-center space-x-2">
+            <div className="flex-grow h-px bg-onedark-comment/30"></div>
+            <span className="text-onedark-comment text-sm">or join using a Room-Code</span>
+            <div className="flex-grow h-px bg-onedark-comment/30"></div>
+          </div>
+
+          {/* Join Room Input */}
           <Card className="bg-onedark-selection/40 backdrop-blur-xl border-onedark-comment/30 hover:bg-onedark-selection/60 transition-all duration-300">
             <CardContent className="p-6 space-y-4">
               <Input
@@ -82,14 +84,6 @@ const Index = () => {
                 className="bg-onedark-background/50 border-onedark-comment/50 text-onedark-foreground placeholder:text-onedark-comment text-center tracking-widest font-mono h-12 backdrop-blur-sm focus:border-onedark-green focus:ring-onedark-green/30"
                 maxLength={6}
               />
-              <Button
-                onClick={handleJoinRoom}
-                disabled={roomId.length !== 6}
-                className="w-full h-12 bg-gradient-to-r from-onedark-green to-onedark-cyan hover:from-onedark-green/80 hover:to-onedark-cyan/80 text-onedark-background font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
-              >
-                <Hash className="mr-2 h-4 w-4" />
-                Join Room
-              </Button>
             </CardContent>
           </Card>
         </div>
