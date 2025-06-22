@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Node modules
+frontend/node_modules/
+
+# Build output
+frontend/.next/
+frontend/out/
+frontend/public/static/
+frontend/.cache/
+frontend/.env
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+frontend/*.log
+backend/*.log
