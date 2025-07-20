@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       host: "::",
-      port: 5002,
+      port: parseInt(env.PORT), 
     },
     plugins: [react()],
     resolve: {
@@ -19,7 +19,6 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      // Make env variables available at build time
       "process.env": env,
     },
   };
