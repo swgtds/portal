@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
 var upgrader = websocket.Upgrader{
@@ -189,6 +190,11 @@ func main() {
 	http.HandleFunc("/ws", withCORS(handleWebSocket))
 
 	startRoomCleanup()
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Error loading .env file")
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
