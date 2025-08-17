@@ -16,239 +16,86 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from '@/components/ui/textarea';
 import { Share, LogOut, Copy, Check, Sparkles, Send, User, Bot, Trash2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { codeToHtml } from 'shiki';
 
-const CodeBlock = ({ children, language = '' }) => {
-  const codeRef = useRef(null);
 
-  const highlightSyntax = (code, lang) => {
-    const patterns = {
-      javascript: [
-        { pattern: /(function|const|let|var|if|else|for|while|return|class|import|export|from|async|await|try|catch|finally)/g, class: 'text-onedark-purple' },
-        { pattern: /(true|false|null|undefined|this)/g, class: 'text-onedark-cyan' },
-        { pattern: /(".*?"|'.*?'|`.*?`)/g, class: 'text-onedark-green' },
-        { pattern: /(\/\/.*$)/gm, class: 'text-onedark-comment italic' },
-        { pattern: /(\/\*[\s\S]*?\*\/)/g, class: 'text-onedark-comment italic' },
-        { pattern: /(\d+)/g, class: 'text-onedark-red' }
-      ],
-      python: [
-        { pattern: /(def|class|if|elif|else|for|while|return|import|from|as|try|except|finally|with|async|await|lambda)/g, class: 'text-onedark-purple' },
-        { pattern: /(True|False|None|self)/g, class: 'text-onedark-cyan' },
-        { pattern: /("""[\s\S]*?"""|'''[\s\S]*?'''|".*?"|'.*?')/g, class: 'text-onedark-green' },
-        { pattern: /(#.*$)/gm, class: 'text-onedark-comment italic' },
-        { pattern: /(\d+)/g, class: 'text-onedark-red' }
-      ],
-      css: [
-        { pattern: /(color|background|margin|padding|border|width|height|font|display|position|flex|grid|transform|transition):/g, class: 'text-onedark-red' },
-        { pattern: /(#[0-9a-fA-F]{3,6}|rgb\(.*?\)|rgba\(.*?\))/g, class: 'text-onedark-cyan' },
-        { pattern: /(\/\*[\s\S]*?\*\/)/g, class: 'text-onedark-comment italic' },
-        { pattern: /(\d+px|\d+em|\d+rem|\d+%)/g, class: 'text-onedark-red' }
-      ],
-      html: [
-        { pattern: /(&lt;\/?[a-zA-Z][^&gt;]*&gt;)/g, class: 'text-onedark-red' },
-        { pattern: /([a-zA-Z-]+)=/g, class: 'text-onedark-yellow' },
-        { pattern: /(".*?"|'.*?')/g, class: 'text-onedark-green' }
-      ]
-    };
-
-    let highlightedCode = code;
-    const langPatterns = patterns[lang.toLowerCase()] || patterns.javascript;
-
-    langPatterns.forEach(({ pattern, class: className }) => {
-      highlightedCode = highlightedCode.replace(pattern, `<span class="${className}">$&</span>`);
-    });
-
-    return highlightedCode;
-  };
+const CodeBlock = ({ children, language = 'text' }) => {
+  const [highlightedCode, setHighlightedCode] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (codeRef.current && children) {
-      const highlighted = highlightSyntax(children, language);
-      codeRef.current.innerHTML = highlighted;
+    const highlightCode = async () => {
+      try {
+        setIsLoading(true);
+        const html = await codeToHtml(children, {
+          lang: language || 'text',
+          theme: 'one-dark-pro'
+        });
+        
+        const cleanedHtml = html
+          .replace(/^<pre[^>]*><code[^>]*>/, '')
+          .replace(/<\/code><\/pre>$/, '');
+        
+        setHighlightedCode(cleanedHtml);
+      } catch (error) {
+        console.error('Shiki highlighting error:', error);
+
+        setHighlightedCode(`<span class="shiki-fallback">${children}</span>`);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (children) {
+      highlightCode();
     }
   }, [children, language]);
 
+  if (isLoading) {
+    return (
+      <div className="rounded-md overflow-hidden my-2 border border-onedark-comment bg-[#282c34]">
+        {language && language !== 'text' && (
+          <div className="px-3 py-2 text-xs font-mono border-b border-onedark-comment bg-[rgba(92,99,112,0.1)] text-[#5c6370]">
+            {language}
+          </div>
+        )}
+        <pre className="p-4 overflow-x-auto m-0 bg-[#282c34]">
+          <code className="text-sm font-mono leading-relaxed text-[#abb2bf] animate-pulse">
+            Loading syntax highlighting...
+          </code>
+        </pre>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-onedark-background border border-onedark-comment rounded-md overflow-hidden my-2">
-      {language && (
-        <div className="bg-onedark-comment/20 px-3 py-1 text-xs text-onedark-comment border-b border-onedark-comment font-mono">
+    <div className="rounded-md overflow-hidden my-2 border border-onedark-comment bg-[#282c34]">
+      {language && language !== 'text' && (
+        <div className="px-3 py-2 text-xs font-mono border-b border-onedark-comment bg-[rgba(92,99,112,0.1)] text-[#5c6370]">
           {language}
         </div>
       )}
-      <pre className="p-4 overflow-x-auto">
-        <code ref={codeRef} className="text-sm text-onedark-foreground font-mono">
-          {children}
-        </code>
+      <pre className="p-4 overflow-x-auto m-0 bg-[#282c34]">
+        <div 
+          className="text-sm font-mono leading-relaxed shiki-container"
+          dangerouslySetInnerHTML={{ __html: highlightedCode }}
+          style={{
+            background: 'transparent',
+          }}
+        />
       </pre>
+      <style>{`
+        .shiki-container code {
+          background: transparent !important;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
+        }
+        .shiki-fallback {
+          color: #abb2bf;
+        }
+      `}</style>
     </div>
-  );
-};
-
-const EditorWithHighlighting = ({ value, onChange, placeholder, className, ...props }) => {
-  const [processedContent, setProcessedContent] = useState({ parts: [], hasCodeBlocks: false });
-  const overlayRef = useRef(null);
-  const textareaRef = useRef(null);
-
-  const processText = (text) => {
-    const codeBlockRegex = /```(\w+)?\n?([\s\S]*?)```/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-    let hasCodeBlocks = false;
-
-    while ((match = codeBlockRegex.exec(text)) !== null) {
-      hasCodeBlocks = true;
-      
-  
-      if (match.index > lastIndex) {
-        parts.push({
-          type: 'text',
-          content: text.slice(lastIndex, match.index),
-          startIndex: lastIndex,
-          endIndex: match.index
-        });
-      }
-      
-
-      parts.push({
-        type: 'code',
-        language: match[1] || 'text',
-        content: match[2],
-        startIndex: match.index,
-        endIndex: match.index + match[0].length,
-        fullMatch: match[0]
-      });
-      
-      lastIndex = match.index + match[0].length;
-    }
-
-    if (lastIndex < text.length) {
-      parts.push({
-        type: 'text',
-        content: text.slice(lastIndex),
-        startIndex: lastIndex,
-        endIndex: text.length
-      });
-    }
-
-    return { parts: parts.length > 0 ? parts : [{ type: 'text', content: text, startIndex: 0, endIndex: text.length }], hasCodeBlocks };
-  };
-
-  useEffect(() => {
-    setProcessedContent(processText(value));
-  }, [value]);
-
-  const handleScroll = () => {
-    if (overlayRef.current && textareaRef.current) {
-      overlayRef.current.scrollTop = textareaRef.current.scrollTop;
-      overlayRef.current.scrollLeft = textareaRef.current.scrollLeft;
-    }
-  };
-
-  return (
-    <div className="relative">
-      {processedContent.hasCodeBlocks && (
-        <div
-          ref={overlayRef}
-          className="absolute inset-0 pointer-events-none overflow-hidden whitespace-pre-wrap break-words font-mono text-base leading-relaxed p-6 z-10"
-          style={{ color: '#abb2bf' }}
-        >
-          {processedContent.parts.map((part, index) => (
-            <span key={index}>
-              {part.type === 'text' ? (
-                <span style={{ color: '#abb2bf' }}>{part.content}</span>
-              ) : (
-                <span className="inline-block w-full bg-onedark-background/90 border border-onedark-comment/70 rounded-md my-1 p-3">
-                  {part.language && (
-                    <div className="text-xs text-onedark-comment mb-2 font-mono">
-                      {part.language}
-                    </div>
-                  )}
-                  <SyntaxHighlighter code={part.content} language={part.language} />
-                </span>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={onChange}
-        onScroll={handleScroll}
-        placeholder={placeholder}
-        className={`relative ${processedContent.hasCodeBlocks ? 'z-20 text-transparent caret-white bg-transparent' : 'z-10 text-onedark-foreground'} ${className}`}
-        style={processedContent.hasCodeBlocks ? { caretColor: '#abb2bf' } : {}}
-        spellCheck={false}
-        {...props}
-      />
-    </div>
-  );
-};
-
-
-const SyntaxHighlighter = ({ code, language }) => {
-  const highlightCode = (text, lang) => {
-
-    const tokens = text.split(/(\s+|[{}();,.])/);
-    
-    const getTokenColor = (token, lang) => {
-      if (!token.trim()) return '#abb2bf';
-      
-      const keywords = {
-        javascript: ['function', 'const', 'let', 'var', 'if', 'else', 'for', 'while', 'return', 'class', 'import', 'export', 'from', 'async', 'await', 'try', 'catch', 'finally'],
-        python: ['def', 'class', 'if', 'elif', 'else', 'for', 'while', 'return', 'import', 'from', 'as', 'try', 'except', 'finally', 'with', 'async', 'await', 'lambda', 'pass', 'break', 'continue'],
-        java: ['public', 'private', 'protected', 'static', 'final', 'abstract', 'class', 'interface', 'extends', 'implements', 'import', 'package', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'break', 'continue', 'return', 'try', 'catch', 'finally', 'throw', 'throws', 'new', 'this', 'super', 'void', 'int', 'double', 'float', 'long', 'short', 'byte', 'char', 'boolean', 'String', 'System']
-      };
-      
-      const booleans = {
-        javascript: ['true', 'false', 'null', 'undefined', 'this'],
-        python: ['True', 'False', 'None', 'self'],
-        java: ['true', 'false', 'null']
-      };
-      
-      const langKeywords = keywords[lang?.toLowerCase()] || keywords.javascript;
-      const langBooleans = booleans[lang?.toLowerCase()] || booleans.javascript;
-      
-
-      if (langKeywords.includes(token)) return '#c678dd';
-
-      if (langBooleans.includes(token)) return '#56b6c2';
-      
-
-      if ((token.startsWith('"') && token.endsWith('"')) || 
-          (token.startsWith("'") && token.endsWith("'")) ||
-          (token.startsWith('`') && token.endsWith('`'))) {
-        return '#98c379';
-      }
-      
-
-      if (/^\d+\.?\d*$/.test(token)) return '#d19a66';
-  
-      if (token.startsWith('//') || token.startsWith('#') || 
-          (token.startsWith('/*') && token.endsWith('*/'))) {
-        return '#5c6370';
-      }
-      
-    
-      if (/^[A-Z][a-zA-Z0-9_]*$/.test(token)) return '#e5c07b';
-      
-      return '#abb2bf';
-    };
-
-    return tokens.map((token, index) => {
-      const color = getTokenColor(token, lang);
-      return `<span key="${index}" style="color: ${color};">${token}</span>`;
-    }).join('');
-  };
-
-  return (
-    <span 
-      className="font-mono text-sm leading-relaxed"
-      style={{ color: '#abb2bf' }}
-      dangerouslySetInnerHTML={{ 
-        __html: highlightCode(code, language) 
-      }}
-    />
   );
 };
 
@@ -585,7 +432,6 @@ const Room = () => {
   };
 
   const handleInsertCodeOnly = (content) => {
-   
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let codeSnippets = [];
     let match;
