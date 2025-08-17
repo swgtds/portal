@@ -17,7 +17,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Share, LogOut, Copy, Check, Sparkles, Send, User, Bot, Trash2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-// syntax highlighting component
 const CodeBlock = ({ children, language = '' }) => {
   const codeRef = useRef(null);
 
@@ -84,7 +83,6 @@ const CodeBlock = ({ children, language = '' }) => {
   );
 };
 
-// Editor with syntax highlighting
 const EditorWithHighlighting = ({ value, onChange, placeholder, className, ...props }) => {
   const [processedContent, setProcessedContent] = useState({ parts: [], hasCodeBlocks: false });
   const overlayRef = useRef(null);
@@ -100,6 +98,7 @@ const EditorWithHighlighting = ({ value, onChange, placeholder, className, ...pr
     while ((match = codeBlockRegex.exec(text)) !== null) {
       hasCodeBlocks = true;
       
+  
       if (match.index > lastIndex) {
         parts.push({
           type: 'text',
@@ -109,6 +108,7 @@ const EditorWithHighlighting = ({ value, onChange, placeholder, className, ...pr
         });
       }
       
+
       parts.push({
         type: 'code',
         language: match[1] || 'text',
@@ -185,8 +185,10 @@ const EditorWithHighlighting = ({ value, onChange, placeholder, className, ...pr
   );
 };
 
+
 const SyntaxHighlighter = ({ code, language }) => {
   const highlightCode = (text, lang) => {
+
     const tokens = text.split(/(\s+|[{}();,.])/);
     
     const getTokenColor = (token, lang) => {
@@ -207,24 +209,29 @@ const SyntaxHighlighter = ({ code, language }) => {
       const langKeywords = keywords[lang?.toLowerCase()] || keywords.javascript;
       const langBooleans = booleans[lang?.toLowerCase()] || booleans.javascript;
       
+
       if (langKeywords.includes(token)) return '#c678dd';
 
       if (langBooleans.includes(token)) return '#56b6c2';
       
+
       if ((token.startsWith('"') && token.endsWith('"')) || 
           (token.startsWith("'") && token.endsWith("'")) ||
           (token.startsWith('`') && token.endsWith('`'))) {
         return '#98c379';
       }
       
+
       if (/^\d+\.?\d*$/.test(token)) return '#d19a66';
-      
+  
       if (token.startsWith('//') || token.startsWith('#') || 
           (token.startsWith('/*') && token.endsWith('*/'))) {
         return '#5c6370';
       }
       
+    
       if (/^[A-Z][a-zA-Z0-9_]*$/.test(token)) return '#e5c07b';
+      
       return '#abb2bf';
     };
 
@@ -491,21 +498,34 @@ const Room = () => {
     };
 
     setChatMessages(prev => [...prev, userMessage]);
+    const currentPrompt = aiPrompt;
     setAiPrompt('');
     setIsGenerating(true);
 
     try {
+
+      const conversationHistory = chatMessages.map(msg => ({
+        role: msg.type === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.content }]
+      }));
+
+      let contextualPrompt = currentPrompt;
+      if (text.trim()) {
+        contextualPrompt = `Context from editor:\n\`\`\`\n${text}\n\`\`\`\n\nUser question: ${currentPrompt}`;
+      }
+
+      conversationHistory.push({
+        role: 'user',
+        parts: [{ text: contextualPrompt }]
+      });
+
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: aiPrompt
-            }]
-          }]
+          contents: conversationHistory
         }),
       });
 
@@ -565,7 +585,7 @@ const Room = () => {
   };
 
   const handleInsertCodeOnly = (content) => {
-
+   
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let codeSnippets = [];
     let match;
