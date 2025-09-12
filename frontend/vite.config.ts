@@ -11,6 +11,10 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "::",
       port: parseInt(env.PORT), 
+      hmr: {
+        // Avoid full-screen overlay for non-critical missing files (e.g., /credentials)
+        overlay: false,
+      },
     },
     plugins: [react()],
     resolve: {
