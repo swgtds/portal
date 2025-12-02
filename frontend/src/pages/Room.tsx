@@ -257,7 +257,7 @@ const Room = () => {
               }
             }}
             textareaRef={textareaRef}
-            placeholder="Start typing... Markdown supported!"
+            placeholder="Start typing... "
           />
           
           <div className="flex justify-end">

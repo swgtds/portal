@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -15,8 +15,61 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
   value,
   onChange,
   textareaRef,
-  placeholder = "Start typing... Markdown supported!"
+  placeholder = "Start typing... "
 }) => {
+  const previewRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const isScrollingSyncRef = useRef(false);
+
+  // Combine the external textareaRef with our internal editorRef
+  const setTextareaRefs = useCallback((element: HTMLTextAreaElement | null) => {
+    if (textareaRef && textareaRef.current !== element) {
+      (textareaRef as any).current = element;
+    }
+    editorRef.current = element;
+  }, [textareaRef]);
+
+  const handleEditorScroll = useCallback(() => {
+    if (isScrollingSyncRef.current || !editorRef.current || !previewRef.current) return;
+    
+    isScrollingSyncRef.current = true;
+    
+    const editor = editorRef.current;
+    const preview = previewRef.current;
+    
+    // Calculate scroll percentage of editor
+    const scrollPercentage = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+    
+    // Apply same scroll percentage to preview
+    const previewScrollTop = scrollPercentage * (preview.scrollHeight - preview.clientHeight);
+    preview.scrollTop = previewScrollTop;
+    
+    // Reset sync flag after a short delay
+    setTimeout(() => {
+      isScrollingSyncRef.current = false;
+    }, 50);
+  }, []);
+
+  const handlePreviewScroll = useCallback(() => {
+    if (isScrollingSyncRef.current || !editorRef.current || !previewRef.current) return;
+    
+    isScrollingSyncRef.current = true;
+    
+    const editor = editorRef.current;
+    const preview = previewRef.current;
+    
+    // Calculate scroll percentage of preview
+    const scrollPercentage = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
+    
+    // Apply same scroll percentage to editor
+    const editorScrollTop = scrollPercentage * (editor.scrollHeight - editor.clientHeight);
+    editor.scrollTop = editorScrollTop;
+    
+    // Reset sync flag after a short delay
+    setTimeout(() => {
+      isScrollingSyncRef.current = false;
+    }, 50);
+  }, []);
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-[85vh] min-h-[700px] max-h-[90vh]">
       {/* Editor Panel */}
@@ -25,11 +78,12 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
           <span className="text-sm font-medium text-onedark-foreground">Editor</span>
         </div>
         <textarea
-          ref={textareaRef}
+          ref={setTextareaRefs}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onScroll={handleEditorScroll}
           placeholder={placeholder}
-          className="w-full h-full p-4 bg-onedark-background text-onedark-foreground border-none outline-none resize-none font-mono text-sm leading-relaxed"
+          className="w-full h-full p-4 bg-onedark-background text-onedark-foreground border-none outline-none resize-none font-mono text-sm leading-relaxed placeholder:text-onedark-comment/60 placeholder:italic"
           style={{ height: 'calc(100% - 50px)' }}
         />
       </div>
@@ -39,7 +93,12 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
         <div className="p-3 border-b border-onedark-selection bg-onedark-selection/40">
           <span className="text-sm font-medium text-onedark-foreground">Preview</span>
         </div>
-        <div className="h-full p-4 overflow-auto prose prose-invert max-w-none" style={{ height: 'calc(100% - 50px)' }}>
+        <div 
+          ref={previewRef}
+          onScroll={handlePreviewScroll}
+          className="h-full p-4 overflow-auto prose prose-invert max-w-none" 
+          style={{ height: 'calc(100% - 50px)' }}
+        >
           {value.trim() ? (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
