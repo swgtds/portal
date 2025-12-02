@@ -200,7 +200,7 @@ const ChatMessage = ({ message, onInsertToEditor, onInsertCodeOnly }) => {
 };
 
 const Room = () => {
-  const { roomId } = useParams<{ roomId: string }>();
+  const { roomId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -211,10 +211,10 @@ const Room = () => {
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
-  const wsRef = useRef<WebSocket | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wsRef = useRef(null);
+  const textareaRef = useRef(null);
   const isUpdatingFromWS = useRef(false);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef(null);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -282,7 +282,7 @@ const Room = () => {
     };
   }, [roomId, navigate, toast]);
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTextChange = (e) => {
     const newText = e.target.value;
     setText(newText);
 
@@ -366,7 +366,8 @@ const Room = () => {
         parts: [{ text: contextualPrompt }]
       });
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      // UPDATED MODEL to gemini-2.5-flash for v1beta compatibility
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -465,7 +466,7 @@ const Room = () => {
     }
   };
 
-  const handlePromptKeyDown = (e: React.KeyboardEvent) => {
+  const handlePromptKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
