@@ -18,10 +18,10 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
   placeholder = "Start typing... Markdown supported!"
 }) => {
   return (
-    <div className="flex gap-4 h-[500px]">
+    <div className="flex flex-col lg:flex-row gap-4 h-[85vh] min-h-[700px] max-h-[90vh]">
       {/* Editor Panel */}
-      <div className="flex-1 bg-onedark-background border border-onedark-selection rounded-lg">
-        <div className="p-2 border-b border-onedark-selection bg-onedark-selection/30">
+      <div className="flex-1 bg-onedark-background border-2 border-onedark-selection rounded-lg shadow-lg">
+        <div className="p-3 border-b border-onedark-selection bg-onedark-selection/40">
           <span className="text-sm font-medium text-onedark-foreground">Editor</span>
         </div>
         <textarea
@@ -30,16 +30,16 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           className="w-full h-full p-4 bg-onedark-background text-onedark-foreground border-none outline-none resize-none font-mono text-sm leading-relaxed"
-          style={{ height: 'calc(100% - 40px)' }}
+          style={{ height: 'calc(100% - 50px)' }}
         />
       </div>
 
       {/* Preview Panel */}
-      <div className="flex-1 bg-onedark-background border border-onedark-selection rounded-lg overflow-hidden">
-        <div className="p-2 border-b border-onedark-selection bg-onedark-selection/30">
+      <div className="flex-1 bg-onedark-background border-2 border-onedark-selection rounded-lg shadow-lg overflow-hidden">
+        <div className="p-3 border-b border-onedark-selection bg-onedark-selection/40">
           <span className="text-sm font-medium text-onedark-foreground">Preview</span>
         </div>
-        <div className="h-full p-4 overflow-auto prose prose-invert max-w-none" style={{ height: 'calc(100% - 40px)' }}>
+        <div className="h-full p-4 overflow-auto prose prose-invert max-w-none" style={{ height: 'calc(100% - 50px)' }}>
           {value.trim() ? (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}

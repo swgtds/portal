@@ -167,7 +167,7 @@ const AIChatDialog = ({
         </button>
       </DialogTrigger>
       
-      <DialogContent className="bg-onedark-background border-onedark-selection max-w-4xl mx-4 sm:mx-auto max-h-[85vh] p-0">
+      <DialogContent className="bg-onedark-background border-onedark-selection max-w-5xl mx-4 sm:mx-auto max-h-[90vh] p-0">
         <DialogHeader className="p-6 pb-4 border-b border-onedark-comment/20">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -194,7 +194,7 @@ const AIChatDialog = ({
           </div>
         </DialogHeader>
         
-        <div className="flex flex-col h-[70vh]">
+        <div className="flex flex-col h-[75vh]">
           {/* Chat Messages Area */}
           <div 
             ref={chatContainerRef}
@@ -248,7 +248,7 @@ const AIChatDialog = ({
                 onChange={(e) => setAiPrompt(e.target.value)}
                 onKeyDown={handlePromptKeyDown}
                 placeholder="Type your message... (Shift+Enter for new line, Enter to send)"
-                className="bg-onedark-selection border-onedark-comment text-onedark-foreground placeholder:text-onedark-comment focus:ring-onedark-blue focus:border-transparent min-h-[60px] resize-none text-sm"
+                className="bg-onedark-selection border-onedark-comment text-onedark-foreground placeholder:text-onedark-comment focus:ring-onedark-blue focus:border-transparent min-h-[80px] resize-none text-sm"
                 disabled={isGenerating}
               />
               <Button

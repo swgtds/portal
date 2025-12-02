@@ -166,8 +166,8 @@ const Room = () => {
   };
 
   return (
-    <div className="min-h-screen bg-onedark-background p-4">
-      <div className="max-w-6xl mx-auto space-y-4">
+    <div className="min-h-screen bg-onedark-background p-2">
+      <div className="max-w-6xl mx-auto space-y-2">
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 min-w-0">
             <h1 className="text-xl font-semibold text-onedark-foreground truncate">
@@ -237,7 +237,7 @@ const Room = () => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <SplitMarkdownEditor
             value={text}
             onChange={(newText) => {
