@@ -82,3 +82,25 @@
     filter: blur(64px);
   }
 }
+
+/* Markdown prose styling for One Dark theme */
+@layer components {
+  .prose-onedark {
+    --tw-prose-body: #abb2bf;
+    --tw-prose-headings: #e06c75;
+    --tw-prose-lead: #abb2bf;
+    --tw-prose-links: #61afef;
+    --tw-prose-bold: #abb2bf;
+    --tw-prose-counters: #e06c75;
+    --tw-prose-bullets: #e06c75;
+    --tw-prose-hr: #3e4451;
+    --tw-prose-quotes: #98c379;
+    --tw-prose-quote-borders: #61afef;
+    --tw-prose-captions: #abb2bf;
+    --tw-prose-code: #e5c07b;
+    --tw-prose-pre-code: #abb2bf;
+    --tw-prose-pre-bg: #282c34;
+    --tw-prose-th-borders: #3e4451;
+    --tw-prose-td-borders: #3e4451;
+  }
+}
