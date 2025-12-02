@@ -15,6 +15,7 @@ import {
 import { Share, LogOut, Copy, Check, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import AIChatDialog from '@/components/ai-chat-dialog';
+import SplitMarkdownEditor from '@/components/split-markdown-editor';
 
 const Room = () => {
   const { roomId } = useParams();
@@ -88,24 +89,6 @@ const Room = () => {
       if (wsRef.current) wsRef.current.close();
     };
   }, [roomId, navigate, toast]);
-
-  const handleTextChange = (e) => {
-    const newText = e.target.value;
-    setText(newText);
-
-    if (
-      !isUpdatingFromWS.current &&
-      wsRef.current &&
-      wsRef.current.readyState === WebSocket.OPEN
-    ) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'text_update',
-          content: newText,
-        })
-      );
-    }
-  };
 
   const handleShareRoom = async () => {
     const roomUrl = `${window.location.origin}/room/${roomId}`;
@@ -255,13 +238,26 @@ const Room = () => {
         </div>
 
         <div className="flex flex-col gap-4">
-          <textarea
-            ref={textareaRef}
+          <SplitMarkdownEditor
             value={text}
-            onChange={handleTextChange}
-            placeholder="Start typing..."
-            className="w-full h-[calc(100vh-180px)] p-6 bg-onedark-selection border border-onedark-comment rounded-lg text-onedark-foreground placeholder:text-onedark-comment resize-none focus:outline-none focus:ring-2 focus:ring-onedark-blue focus:border-transparent text-base leading-relaxed font-mono"
-            spellCheck={false}
+            onChange={(newText) => {
+              setText(newText);
+              
+              if (
+                !isUpdatingFromWS.current &&
+                wsRef.current &&
+                wsRef.current.readyState === WebSocket.OPEN
+              ) {
+                wsRef.current.send(
+                  JSON.stringify({
+                    type: 'text_update',
+                    content: newText,
+                  })
+                );
+              }
+            }}
+            textareaRef={textareaRef}
+            placeholder="Start typing... Markdown supported!"
           />
           
           <div className="flex justify-end">
