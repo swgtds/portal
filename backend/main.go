@@ -16,15 +16,30 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
+		// Allow connections from any origin for cloud deployments
 		return true
 	},
+	ReadBufferSize:    1024,
+	WriteBufferSize:   1024,
+	HandshakeTimeout:  45 * time.Second, // Longer timeout for cloud
+	EnableCompression: true,             // Enable compression for better performance over internet
+}
+
+type Client struct {
+	conn     *websocket.Conn
+	lastPing time.Time
 }
 
 type Room struct {
-	clients    map[*websocket.Conn]bool
+	clients    map[*Client]bool
 	content    string
 	lastActive time.Time
 	lock       sync.Mutex
+}
+
+type Message struct {
+	Type    string `json:"type"`
+	Content string `json:"content,omitempty"`
 }
 
 var rooms = make(map[string]*Room)
@@ -40,7 +55,7 @@ func handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	roomsLock.Lock()
 	rooms[roomID] = &Room{
-		clients:    make(map[*websocket.Conn]bool),
+		clients:    make(map[*Client]bool),
 		lastActive: time.Now(),
 	}
 	roomsLock.Unlock()
@@ -64,6 +79,21 @@ func handleRoomExists(w http.ResponseWriter, r *http.Request) {
 	roomsLock.Unlock()
 
 	resp := map[string]bool{"exists": exists}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	roomsLock.Lock()
+	roomCount := len(rooms)
+	roomsLock.Unlock()
+
+	resp := map[string]interface{}{
+		"status":    "healthy",
+		"timestamp": time.Now().Unix(),
+		"rooms":     roomCount,
+		"uptime":    time.Since(time.Now().Add(-time.Hour)).String(), // Placeholder for actual uptime
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -92,20 +122,53 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	room.lock.Lock()
 	if room.content != "" {
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(room.content)); err != nil {
+		msg := Message{Type: "text_update", Content: room.content}
+		msgBytes, _ := json.Marshal(msg)
+		if err := conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
 			log.Println("Failed to send initial content to client:", err)
 		}
 	}
-	room.clients[conn] = true
+	client := &Client{
+		conn:     conn,
+		lastPing: time.Now(),
+	}
+	room.clients[client] = true
 	room.lastActive = time.Now()
 	room.lock.Unlock()
 
 	log.Printf("Client joined room: %s", roomID)
 
+	// Set connection timeouts (more aggressive for cloud)
+	conn.SetReadDeadline(time.Now().Add(90 * time.Second))  // 90 seconds read timeout
+	conn.SetWriteDeadline(time.Now().Add(30 * time.Second)) // 30 seconds write timeout
+
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+		log.Println("Received pong from client")
+		return nil
+	})
+
+	// Start ping routine (more frequent for cloud deployments)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					log.Printf("Ping failed: %v", err)
+					return
+				}
+				log.Println("Sent ping to client")
+			}
+		}
+	}()
+
 	go func() {
 		defer func() {
 			room.lock.Lock()
-			delete(room.clients, conn)
+			delete(room.clients, client)
 			room.lock.Unlock()
 			conn.Close()
 
@@ -117,16 +180,42 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		for {
-			_, msg, err := conn.ReadMessage()
+			conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+			_, msgBytes, err := conn.ReadMessage()
 			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
+					log.Printf("WebSocket unexpected close error: %v", err)
+				} else {
+					log.Printf("WebSocket read error: %v", err)
+				}
 				break
 			}
-			room.lock.Lock()
-			room.content = string(msg)
-			room.lastActive = time.Now()
-			room.lock.Unlock()
 
-			broadcastToRoom(roomID, msg)
+			var msg Message
+			if err := json.Unmarshal(msgBytes, &msg); err != nil {
+				log.Printf("Error unmarshaling message: %v", err)
+				continue
+			}
+
+			switch msg.Type {
+			case "ping":
+				// Respond with pong
+				pongMsg := Message{Type: "pong"}
+				pongBytes, _ := json.Marshal(pongMsg)
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := conn.WriteMessage(websocket.TextMessage, pongBytes); err != nil {
+					log.Printf("Error sending pong: %v", err)
+				} else {
+					log.Println("Sent pong response")
+				}
+				client.lastPing = time.Now()
+			case "text_update":
+				room.lock.Lock()
+				room.content = msg.Content
+				room.lastActive = time.Now()
+				room.lock.Unlock()
+				broadcastToRoom(roomID, msgBytes)
+			}
 		}
 	}()
 }
@@ -142,12 +231,22 @@ func broadcastToRoom(roomID string, msg []byte) {
 	room.lock.Lock()
 	defer room.lock.Unlock()
 
+	// Create a list of clients to remove if write fails
+	var toRemove []*Client
+
 	for client := range room.clients {
-		err := client.WriteMessage(websocket.TextMessage, msg)
+		client.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		err := client.conn.WriteMessage(websocket.TextMessage, msg)
 		if err != nil {
-			client.Close()
-			delete(room.clients, client)
+			log.Printf("Write error to client: %v", err)
+			client.conn.Close()
+			toRemove = append(toRemove, client)
 		}
+	}
+
+	// Remove failed clients
+	for _, client := range toRemove {
+		delete(room.clients, client)
 	}
 }
 
@@ -172,9 +271,15 @@ func startRoomCleanup() {
 
 func withCORS(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Enhanced CORS headers for cloud deployments
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Credentials", "false")
+
+		// Add headers for WebSocket upgrades
+		w.Header().Set("Upgrade", "websocket")
+		w.Header().Set("Connection", "Upgrade")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -187,7 +292,8 @@ func withCORS(h http.HandlerFunc) http.HandlerFunc {
 func main() {
 	http.HandleFunc("/create", withCORS(handleCreateRoom))
 	http.HandleFunc("/exists", withCORS(handleRoomExists))
-	http.HandleFunc("/ws", withCORS(handleWebSocket))
+	http.HandleFunc("/health", withCORS(handleHealth))
+	http.HandleFunc("/ws", handleWebSocket) // Don't wrap WebSocket with CORS as it handles its own headers
 
 	startRoomCleanup()
 
@@ -198,10 +304,10 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "5001"
+		port = "5000" // Changed default from 5001 to 5000
 	}
 
 	log.Printf("Backend running on port %s", port)
+	log.Printf("Health check available at /health")
 	log.Fatal(http.ListenAndServe("0.0.0.0:"+port, nil))
-
 }
