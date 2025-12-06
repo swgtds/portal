@@ -29,6 +29,10 @@ const Room = () => {
   const wsRef = useRef(null);
   const textareaRef = useRef(null);
   const isUpdatingFromWS = useRef(false);
+  const reconnectTimeoutRef = useRef(null);
+  const pingIntervalRef = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 10;
 
   useEffect(() => {
     if (!roomId || roomId.length !== 6) {
@@ -36,57 +40,135 @@ const Room = () => {
       return;
     }
 
-    const backendURL = import.meta.env.VITE_BACKEND_URL;
-    const ws = new WebSocket(`${backendURL}/ws?room=${roomId}`);
-    wsRef.current = ws;
+    const connectWebSocket = () => {
+      const backendURL = import.meta.env.VITE_BACKEND_URL;
+      
+      // Convert HTTP to WebSocket protocol for cloud deployments
+      const wsURL = backendURL.replace(/^https?:\/\//, (match) => 
+        match === 'https://' ? 'wss://' : 'ws://'
+      );
+      
+      const ws = new WebSocket(`${wsURL}/ws?room=${roomId}`);
+      wsRef.current = ws;
 
-    let didReceiveOpen = false;
-
-    ws.onopen = () => {
-      didReceiveOpen = true;
-      console.log('WebSocket connected');
-      setIsBackendConnected(true);
-      toast({
-        title: "Backend Connected",
-        description: "Real-time collaboration is active",
-      });
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'text_update') {
-          isUpdatingFromWS.current = true;
-          setText(data.content);
-          setTimeout(() => {
-            isUpdatingFromWS.current = false;
-          }, 0);
+      let didReceiveOpen = false;
+      
+      // Set connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (!didReceiveOpen) {
+          console.log('Connection timeout, closing...');
+          ws.close();
         }
-      } catch (error) {
-        console.error('Error parsing message:', error);
-      }
-    };
+      }, 10000); // 10 second timeout
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket closed');
-      if (!didReceiveOpen) {
+      ws.onopen = () => {
+        didReceiveOpen = true;
+        clearTimeout(connectionTimeout);
+        reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
+        console.log('WebSocket connected');
+        setIsBackendConnected(true);
         toast({
-          title: "Room Not Found",
-          description: "The room you're trying to join doesn't exist.",
-          variant: "destructive"
+          title: "Backend Connected",
+          description: "Real-time collaboration is active",
         });
-        navigate('/');
-      } else {
+
+        // Start ping interval to keep connection alive (more aggressive for cloud)
+        pingIntervalRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 25000); // Ping every 25 seconds (more frequent for cloud)
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'text_update') {
+            isUpdatingFromWS.current = true;
+            setText(data.content);
+            setTimeout(() => {
+              isUpdatingFromWS.current = false;
+            }, 0);
+          } else if (data.type === 'pong') {
+            // Received pong response, connection is alive
+            console.log('Received pong from server');
+          }
+        } catch (error) {
+          console.error('Error parsing message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        clearTimeout(connectionTimeout);
+      };
+
+      ws.onclose = (event) => {
+        console.log('WebSocket closed', event.code, event.reason);
+        clearTimeout(connectionTimeout);
         setIsBackendConnected(false);
-      }
+        
+        // Clear ping interval
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
+        }
+
+        if (!didReceiveOpen && event.code === 1006) {
+          toast({
+            title: "Connection Failed",
+            description: "Could not connect to server. Check if backend is running.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        if (!didReceiveOpen) {
+          toast({
+            title: "Room Not Found",
+            description: "The room you're trying to join doesn't exist.",
+            variant: "destructive"
+          });
+          navigate('/');
+        } else {
+          // Attempt to reconnect with exponential backoff
+          if (reconnectAttempts.current < maxReconnectAttempts) {
+            const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+            reconnectAttempts.current++;
+            
+            toast({
+              title: "Connection Lost",
+              description: `Reconnecting in ${Math.ceil(backoffDelay / 1000)} seconds... (${reconnectAttempts.current}/${maxReconnectAttempts})`,
+              variant: "destructive"
+            });
+            
+            reconnectTimeoutRef.current = setTimeout(() => {
+              console.log(`Reconnect attempt ${reconnectAttempts.current}/${maxReconnectAttempts}`);
+              connectWebSocket();
+            }, backoffDelay);
+          } else {
+            toast({
+              title: "Connection Failed",
+              description: "Max reconnection attempts reached. Please refresh the page.",
+              variant: "destructive"
+            });
+          }
+        }
+      };
     };
+
+    connectWebSocket();
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, [roomId, navigate, toast]);
 
