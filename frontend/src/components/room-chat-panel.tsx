@@ -61,7 +61,7 @@ const RoomChatPanel = ({ messages, onSend, username, onlineUsers }: RoomChatPane
               }`}
             >
               <Circle size={6} className="text-onedark-green fill-onedark-green" />
-              <span className="truncate max-w-[60px] sm:max-w-[80px]">{user === username ? 'You' : user.split(' ')[0]}</span>
+              <span className="truncate max-w-[80px] sm:max-w-[120px]">{user === username ? 'You' : user}</span>
             </div>
           ))}
           {onlineUsers.length > 4 && (
@@ -91,11 +91,11 @@ const RoomChatPanel = ({ messages, onSend, username, onlineUsers }: RoomChatPane
               {/* Sender + time */}
               <div className="flex items-center gap-1 mb-0.5 px-0.5">
                 <span
-                  className={`text-[11px] sm:text-xs font-medium truncate max-w-[70px] sm:max-w-[100px] ${
+                  className={`text-[11px] sm:text-xs font-medium truncate max-w-[100px] sm:max-w-[150px] ${
                     msg.isOwn ? 'text-onedark-blue' : 'text-onedark-green'
                   }`}
                 >
-                  {msg.isOwn ? 'You' : msg.sender.split(' ')[0]}
+                  {msg.isOwn ? 'You' : msg.sender}
                 </span>
                 <span className="text-[10px] sm:text-[11px] text-onedark-comment">
                   {new Date(msg.timestamp).toLocaleTimeString([], {
