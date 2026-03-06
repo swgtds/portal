@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,10 +12,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
-import { Share, LogOut, Check, Trash2, Sparkles, MessageSquareOff } from 'lucide-react';
+import { Share, LogOut, Check, Trash2, Sparkles, MessageSquareOff, Users, Bot } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import AIChatPanel from '@/components/ai-chat-panel';
+import RoomChatPanel, { RoomChatMessage } from '@/components/room-chat-panel';
 import SplitMarkdownEditor from '@/components/split-markdown-editor';
+
+/** Generate a random guest name that persists for the session */
+function getUsername(): string {
+  const key = 'portal_username';
+  const stored = sessionStorage.getItem(key);
+  if (stored) return stored;
+  const adjectives = ['Swift', 'Quiet', 'Bold', 'Calm', 'Bright', 'Dark', 'Fuzzy', 'Snappy'];
+  const nouns = ['Fox', 'Owl', 'Bee', 'Cat', 'Wolf', 'Bear', 'Lynx', 'Hawk'];
+  const name =
+    adjectives[Math.floor(Math.random() * adjectives.length)] +
+    nouns[Math.floor(Math.random() * nouns.length)] +
+    Math.floor(Math.random() * 100);
+  sessionStorage.setItem(key, name);
+  return name;
+}
+
+type ChatTab = 'room' | 'ai';
 
 const Room = () => {
   const { roomId } = useParams();
@@ -25,7 +43,11 @@ const Room = () => {
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ChatTab>('room');
+  const [roomMessages, setRoomMessages] = useState<RoomChatMessage[]>([]);
+  const [unreadRoom, setUnreadRoom] = useState(0);
+
   const wsRef = useRef(null);
   const textareaRef = useRef(null);
   const isUpdatingFromWS = useRef(false);
@@ -33,6 +55,10 @@ const Room = () => {
   const pingIntervalRef = useRef(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 10;
+  const username = useRef(getUsername()).current;
+
+  // Track whether panel + room tab is visible to suppress unread badge
+  const isRoomTabVisible = isPanelOpen && activeTab === 'room';
 
   useEffect(() => {
     if (!roomId || roomId.length !== 6) {
@@ -42,42 +68,31 @@ const Room = () => {
 
     const connectWebSocket = () => {
       const backendURL = import.meta.env.VITE_BACKEND_URL;
-      
-      // Convert HTTP to WebSocket protocol for cloud deployments
-      const wsURL = backendURL.replace(/^https?:\/\//, (match) => 
+      const wsURL = backendURL.replace(/^https?:\/\//, (match) =>
         match === 'https://' ? 'wss://' : 'ws://'
       );
-      
+
       const ws = new WebSocket(`${wsURL}/ws?room=${roomId}`);
       wsRef.current = ws;
 
       let didReceiveOpen = false;
-      
-      // Set connection timeout
+
       const connectionTimeout = setTimeout(() => {
-        if (!didReceiveOpen) {
-          console.log('Connection timeout, closing...');
-          ws.close();
-        }
-      }, 10000); // 10 second timeout
+        if (!didReceiveOpen) ws.close();
+      }, 10000);
 
       ws.onopen = () => {
         didReceiveOpen = true;
         clearTimeout(connectionTimeout);
-        reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
-        console.log('WebSocket connected');
+        reconnectAttempts.current = 0;
         setIsBackendConnected(true);
-        toast({
-          title: "Backend Connected",
-          description: "Real-time collaboration is active",
-        });
+        toast({ title: 'Backend Connected', description: 'Real-time collaboration is active' });
 
-        // Start ping interval to keep connection alive (more aggressive for cloud)
         pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'ping' }));
           }
-        }, 25000); // Ping every 25 seconds (more frequent for cloud)
+        }, 25000);
       };
 
       ws.onmessage = (event) => {
@@ -86,12 +101,25 @@ const Room = () => {
           if (data.type === 'text_update') {
             isUpdatingFromWS.current = true;
             setText(data.content);
-            setTimeout(() => {
-              isUpdatingFromWS.current = false;
-            }, 0);
+            setTimeout(() => { isUpdatingFromWS.current = false; }, 0);
           } else if (data.type === 'pong') {
-            // Received pong response, connection is alive
-            console.log('Received pong from server');
+            // keep-alive
+          } else if (data.type === 'chat_message') {
+            const isOwn = data.sender === username;
+            setRoomMessages(prev => [
+              ...prev,
+              {
+                id: Date.now() + Math.random(),
+                sender: data.sender,
+                content: data.content,
+                timestamp: new Date().toISOString(),
+                isOwn,
+              },
+            ]);
+            // Bump unread badge if panel/tab is not currently showing
+            if (!isOwn) {
+              setUnreadRoom(prev => (isRoomTabVisible ? 0 : prev + 1));
+            }
           }
         } catch (error) {
           console.error('Error parsing message:', error);
@@ -104,55 +132,31 @@ const Room = () => {
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket closed', event.code, event.reason);
         clearTimeout(connectionTimeout);
         setIsBackendConnected(false);
-        
-        // Clear ping interval
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
           pingIntervalRef.current = null;
         }
 
         if (!didReceiveOpen && event.code === 1006) {
-          toast({
-            title: "Connection Failed",
-            description: "Could not connect to server. Check if backend is running.",
-            variant: "destructive"
-          });
+          toast({ title: 'Connection Failed', description: 'Could not connect to server.', variant: 'destructive' });
           return;
         }
-
         if (!didReceiveOpen) {
-          toast({
-            title: "Room Not Found",
-            description: "The room you're trying to join doesn't exist.",
-            variant: "destructive"
-          });
+          toast({ title: 'Room Not Found', description: "The room you're trying to join doesn't exist.", variant: 'destructive' });
           navigate('/');
+        } else if (reconnectAttempts.current < maxReconnectAttempts) {
+          const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+          reconnectAttempts.current++;
+          toast({
+            title: 'Connection Lost',
+            description: `Reconnecting in ${Math.ceil(backoffDelay / 1000)}s… (${reconnectAttempts.current}/${maxReconnectAttempts})`,
+            variant: 'destructive',
+          });
+          reconnectTimeoutRef.current = setTimeout(connectWebSocket, backoffDelay);
         } else {
-          // Attempt to reconnect with exponential backoff
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-            reconnectAttempts.current++;
-            
-            toast({
-              title: "Connection Lost",
-              description: `Reconnecting in ${Math.ceil(backoffDelay / 1000)} seconds... (${reconnectAttempts.current}/${maxReconnectAttempts})`,
-              variant: "destructive"
-            });
-            
-            reconnectTimeoutRef.current = setTimeout(() => {
-              console.log(`Reconnect attempt ${reconnectAttempts.current}/${maxReconnectAttempts}`);
-              connectWebSocket();
-            }, backoffDelay);
-          } else {
-            toast({
-              title: "Connection Failed",
-              description: "Max reconnection attempts reached. Please refresh the page.",
-              variant: "destructive"
-            });
-          }
+          toast({ title: 'Connection Failed', description: 'Max reconnection attempts reached.', variant: 'destructive' });
         }
       };
     };
@@ -160,197 +164,164 @@ const Room = () => {
     connectWebSocket();
 
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+      if (wsRef.current) wsRef.current.close();
     };
   }, [roomId, navigate, toast]);
+
+  // Clear unread when user opens the room tab
+  useEffect(() => {
+    if (isRoomTabVisible) setUnreadRoom(0);
+  }, [isRoomTabVisible]);
 
   const handleShareRoom = async () => {
     const roomUrl = `${window.location.origin}/room/${roomId}`;
     try {
       await navigator.clipboard.writeText(roomUrl);
       setCopied(true);
-      toast({
-        title: "Room URL Copied!",
-        description: "Share this link with others to collaborate",
-      });
+      toast({ title: 'Room URL Copied!', description: 'Share this link with others to collaborate' });
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      toast({
-        title: "Copy Failed",
-        description: "Please copy the URL manually from the address bar",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: 'Copy Failed', description: 'Please copy the URL manually from the address bar', variant: 'destructive' });
     }
   };
 
-  const handleExitRoom = () => {
-    navigate('/');
-  };
+  const handleExitRoom = () => navigate('/');
 
-  const handleInsertToEditor = (content) => {
+  const handleInsertToEditor = (content: string) => {
     const newText = text + (text ? '\n\n' : '') + content;
     setText(newText);
-    
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'text_update',
-        content: newText
-      }));
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
     }
-    
-    toast({
-      title: "Full Text Inserted",
-      description: "AI response has been added to the editor",
-    });
+    toast({ title: 'Full Text Inserted', description: 'AI response has been added to the editor' });
   };
 
-  const handleInsertCodeOnly = (content) => {
+  const handleInsertCodeOnly = (content: string) => {
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-    let codeSnippets = [];
-    let match;
-
+    const codeSnippets: string[] = [];
+    let match: RegExpExecArray | null;
     while ((match = codeBlockRegex.exec(content)) !== null) {
       codeSnippets.push(match[2].trim());
     }
-
     if (codeSnippets.length > 0) {
       const codeToInsert = codeSnippets.join('\n\n');
       const newText = text + (text ? '\n\n' : '') + codeToInsert;
       setText(newText);
-      
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: 'text_update',
-          content: newText
-        }));
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
       }
-      
-      toast({
-        title: "Code Snippets Inserted",
-        description: `${codeSnippets.length} code snippet(s) added to the editor`,
-      });
+      toast({ title: 'Code Snippets Inserted', description: `${codeSnippets.length} snippet(s) added` });
     } else {
-      toast({
-        title: "No Code Found",
-        description: "No code blocks found in this response",
-        variant: "destructive",
-      });
+      toast({ title: 'No Code Found', description: 'No code blocks found in this response', variant: 'destructive' });
     }
   };
 
+  const handleSendRoomChat = useCallback((msg: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      toast({ title: 'Not connected', description: 'Reconnecting…', variant: 'destructive' });
+      return;
+    }
+    wsRef.current.send(JSON.stringify({ type: 'chat_message', content: msg, sender: username }));
+  }, [username, toast]);
+
+  const openTab = (tab: ChatTab) => {
+    setActiveTab(tab);
+    setIsPanelOpen(true);
+  };
+
   return (
-    <div className="min-h-screen bg-onedark-background p-2">
-      <div className="max-w-[1800px] mx-auto space-y-2">
+    <div className="min-h-screen bg-onedark-background p-2 flex flex-col">
+      <div className="max-w-[1800px] mx-auto w-full flex flex-col flex-1 gap-2">
+
         {/* ── Toolbar ─────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 min-w-0">
-            <h1 className="text-xl font-semibold text-onedark-foreground truncate">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <h1 className="text-base sm:text-xl font-semibold text-onedark-foreground truncate">
               Room <span className="text-onedark-blue font-mono">{roomId}</span>
             </h1>
-            <span
-              className={`text-sm font-medium ${
-                isBackendConnected ? 'text-onedark-green' : 'text-onedark-red'
-              }`}
-            >
-              {isBackendConnected ? 'Connected' : 'Disconnected'}
+            <span className={`text-xs sm:text-sm font-medium flex-shrink-0 ${isBackendConnected ? 'text-onedark-green' : 'text-onedark-red'}`}>
+              {isBackendConnected ? '● Connected' : '● Disconnected'}
             </span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            {/* AI Chat toggle */}
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            {/* Room Chat toggle */}
             <button
-              onClick={() => setIsChatOpen(prev => !prev)}
-              className={`group relative overflow-hidden rounded-md px-3 py-2 sm:px-4 sm:py-2 transition-all duration-300 transform hover:scale-105 shadow-lg ${
-                isChatOpen
-                  ? 'bg-onedark-selection border border-onedark-blue/60 text-onedark-blue'
-                  : 'bg-gradient-to-r from-onedark-blue via-onedark-purple to-onedark-cyan text-white'
+              onClick={() => isPanelOpen && activeTab === 'room' ? setIsPanelOpen(false) : openTab('room')}
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 border ${
+                isPanelOpen && activeTab === 'room'
+                  ? 'bg-onedark-green/20 border-onedark-green/60 text-onedark-green'
+                  : 'bg-transparent border-onedark-selection text-onedark-foreground hover:bg-onedark-selection'
               }`}
             >
-              {!isChatOpen && (
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <Users size={14} />
+              <span className="hidden sm:inline">Chat</span>
+              {unreadRoom > 0 && !(isPanelOpen && activeTab === 'room') && (
+                <span className="absolute -top-1 -right-1 bg-onedark-red text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                  {unreadRoom > 9 ? '9+' : unreadRoom}
+                </span>
               )}
-              <div className="relative flex items-center text-xs sm:text-sm font-medium gap-1.5">
-                {isChatOpen ? (
-                  <MessageSquareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                )}
-                <span className="hidden xs:inline">{isChatOpen ? 'Close Chat' : 'AI Chat'}</span>
-                <span className="xs:hidden">AI</span>
-              </div>
             </button>
 
-            <Button
-              onClick={handleShareRoom}
-              variant="outline"
-              size="sm"
-              className="border-onedark-selection bg-transparent hover:bg-onedark-selection text-onedark-foreground"
+            {/* AI Chat toggle */}
+            <button
+              onClick={() => isPanelOpen && activeTab === 'ai' ? setIsPanelOpen(false) : openTab('ai')}
+              className={`group relative overflow-hidden flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 ${
+                isPanelOpen && activeTab === 'ai'
+                  ? 'bg-onedark-selection border border-onedark-blue/60 text-onedark-blue'
+                  : 'bg-gradient-to-r from-onedark-blue via-onedark-purple to-onedark-cyan text-white border border-transparent'
+              }`}
             >
-              {copied ? <Check className="mr-2 h-4 w-4" /> : <Share className="mr-2 h-4 w-4" />}
-              {copied ? 'Copied!' : 'Share'}
+              {!(isPanelOpen && activeTab === 'ai') && (
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              )}
+              <Sparkles size={14} className="relative" />
+              <span className="hidden sm:inline relative">AI</span>
+            </button>
+
+            <Button onClick={handleShareRoom} variant="outline" size="sm"
+              className="border-onedark-selection bg-transparent hover:bg-onedark-selection text-onedark-foreground h-8 px-2 sm:px-3">
+              {copied ? <Check size={14} /> : <Share size={14} />}
+              <span className="hidden sm:inline ml-1.5">{copied ? 'Copied!' : 'Share'}</span>
             </Button>
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-onedark-red/50 bg-transparent hover:bg-onedark-red/10 text-onedark-red"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Exit
+                <Button variant="outline" size="sm"
+                  className="border-onedark-red/50 bg-transparent hover:bg-onedark-red/10 text-onedark-red h-8 px-2 sm:px-3">
+                  <LogOut size={14} />
+                  <span className="hidden sm:inline ml-1.5">Exit</span>
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="bg-onedark-background border-onedark-selection">
+              <AlertDialogContent className="bg-onedark-background border-onedark-selection mx-4">
                 <AlertDialogHeader>
-                  <AlertDialogTitle className="text-onedark-foreground">
-                    Exit Room?
-                  </AlertDialogTitle>
+                  <AlertDialogTitle className="text-onedark-foreground">Exit Room?</AlertDialogTitle>
                   <AlertDialogDescription className="text-onedark-comment">
-                    Are you sure you want to leave this session? Your AI chat history will be lost.
+                    Are you sure you want to leave this session?
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel className="bg-transparent border-onedark-comment text-onedark-foreground hover:bg-onedark-selection">
-                    Stay
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleExitRoom}
-                    className="bg-onedark-red hover:bg-onedark-red/80 text-white"
-                  >
-                    Exit
-                  </AlertDialogAction>
+                  <AlertDialogCancel className="bg-transparent border-onedark-comment text-onedark-foreground hover:bg-onedark-selection">Stay</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleExitRoom} className="bg-onedark-red hover:bg-onedark-red/80 text-white">Exit</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           </div>
         </div>
 
-        {/* ── Editor + Chat layout ────────────────────────────────── */}
-        <div className={`flex gap-3 ${isChatOpen ? 'flex-col lg:flex-row' : ''}`}>
+        {/* ── Editor + Panel layout ───────────────────────────────── */}
+        {/* Desktop: side-by-side. Mobile: editor on top, panel below as a sheet */}
+        <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-0">
           {/* Editor */}
-          <div className={isChatOpen ? 'lg:flex-1 min-w-0' : 'w-full'}>
+          <div className={`${isPanelOpen ? 'lg:flex-1 min-w-0 h-[50vh] lg:h-auto' : 'w-full'}`}>
             <SplitMarkdownEditor
               value={text}
               onChange={(newText) => {
                 setText(newText);
-                if (
-                  !isUpdatingFromWS.current &&
-                  wsRef.current &&
-                  wsRef.current.readyState === WebSocket.OPEN
-                ) {
-                  wsRef.current.send(
-                    JSON.stringify({ type: 'text_update', content: newText })
-                  );
+                if (!isUpdatingFromWS.current && wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
                 }
               }}
               textareaRef={textareaRef}
@@ -358,40 +329,85 @@ const Room = () => {
             />
           </div>
 
-          {/* Chat Panel */}
-          {isChatOpen && (
-            <div className="lg:w-[420px] xl:w-[480px] flex-shrink-0 h-[85vh] min-h-[700px] max-h-[90vh]">
-              <AIChatPanel
-                text={text}
-                onInsertToEditor={handleInsertToEditor}
-                onInsertCodeOnly={handleInsertCodeOnly}
-              />
+          {/* Side Panel */}
+          {isPanelOpen && (
+            <div className="
+              lg:w-[420px] xl:w-[480px] flex-shrink-0
+              h-[55vh] lg:h-auto
+              lg:min-h-[700px] lg:max-h-[90vh]
+              flex flex-col
+            ">
+              {/* Tab switcher (only shown when panel is open) */}
+              <div className="flex rounded-t-lg border-2 border-b-0 border-onedark-selection overflow-hidden">
+                <button
+                  onClick={() => setActiveTab('room')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+                    activeTab === 'room'
+                      ? 'bg-onedark-selection/60 text-onedark-green border-b-2 border-onedark-green'
+                      : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
+                  }`}
+                >
+                  <Users size={13} />
+                  Room Chat
+                  {unreadRoom > 0 && activeTab !== 'room' && (
+                    <span className="bg-onedark-red text-white text-[9px] font-bold rounded-full min-w-[15px] h-3.5 flex items-center justify-center px-1">
+                      {unreadRoom > 9 ? '9+' : unreadRoom}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('ai')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+                    activeTab === 'ai'
+                      ? 'bg-onedark-selection/60 text-onedark-blue border-b-2 border-onedark-blue'
+                      : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
+                  }`}
+                >
+                  <Bot size={13} />
+                  AI Chat
+                </button>
+              </div>
+
+              {/* Panel content — fills remaining height */}
+              <div className="flex-1 min-h-0 [&>div]:rounded-t-none [&>div]:border-t-0">
+                {activeTab === 'room' ? (
+                  <RoomChatPanel
+                    messages={roomMessages}
+                    onSend={handleSendRoomChat}
+                    username={username}
+                  />
+                ) : (
+                  <AIChatPanel
+                    text={text}
+                    onInsertToEditor={handleInsertToEditor}
+                    onInsertCodeOnly={handleInsertCodeOnly}
+                  />
+                )}
+              </div>
             </div>
           )}
         </div>
 
-        {/* ── Footer actions ──────────────────────────────────────── */}
+        {/* ── Footer ──────────────────────────────────────────────── */}
         <div className="flex justify-end">
           <Button
             onClick={() => {
               setText('');
-              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              if (wsRef.current?.readyState === WebSocket.OPEN) {
                 wsRef.current.send(JSON.stringify({ type: 'text_update', content: '' }));
               }
-              toast({
-                title: 'Editor Cleared',
-                description: 'All content has been deleted from the editor',
-              });
+              toast({ title: 'Editor Cleared', description: 'All content has been deleted from the editor' });
             }}
             variant="outline"
             size="sm"
             className="border-onedark-red/50 bg-transparent hover:bg-onedark-red/10 text-onedark-red"
             disabled={!text.trim()}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="mr-1.5 h-4 w-4" />
             Delete All
           </Button>
         </div>
+
       </div>
     </div>
   );

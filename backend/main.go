@@ -40,6 +40,7 @@ type Room struct {
 type Message struct {
 	Type    string `json:"type"`
 	Content string `json:"content,omitempty"`
+	Sender  string `json:"sender,omitempty"`
 }
 
 var rooms = make(map[string]*Room)
@@ -212,6 +213,12 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			case "text_update":
 				room.lock.Lock()
 				room.content = msg.Content
+				room.lastActive = time.Now()
+				room.lock.Unlock()
+				broadcastToRoom(roomID, msgBytes)
+			case "chat_message":
+				// Relay to all clients in the room (don't persist)
+				room.lock.Lock()
 				room.lastActive = time.Now()
 				room.lock.Unlock()
 				broadcastToRoom(roomID, msgBytes)
