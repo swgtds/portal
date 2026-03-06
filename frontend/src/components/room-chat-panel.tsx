@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Users, Send } from 'lucide-react';
+import { Users, Send, Circle } from 'lucide-react';
 
 export interface RoomChatMessage {
   id: number;
@@ -15,9 +15,10 @@ interface RoomChatPanelProps {
   messages: RoomChatMessage[];
   onSend: (text: string) => void;
   username: string;
+  onlineUsers: string[];
 }
 
-const RoomChatPanel = ({ messages, onSend, username }: RoomChatPanelProps) => {
+const RoomChatPanel = ({ messages, onSend, username, onlineUsers }: RoomChatPanelProps) => {
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -41,13 +42,35 @@ const RoomChatPanel = ({ messages, onSend, username }: RoomChatPanelProps) => {
 
   return (
     <div className="flex flex-col h-full bg-onedark-background border-2 border-onedark-selection rounded-lg shadow-lg overflow-hidden">
-      {/* Header */}
+      {/* Header with your name */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-onedark-selection bg-onedark-selection/40 flex-shrink-0">
         <Users size={15} className="text-onedark-green" />
         <span className="text-sm font-medium text-onedark-foreground">Room Chat</span>
-        <span className="ml-auto text-xs text-onedark-comment truncate max-w-[120px]">
-          You: <span className="text-onedark-cyan font-mono">{username}</span>
+        <span className="ml-auto text-xs text-onedark-comment">
+          You are <span className="text-onedark-cyan font-medium">{username}</span>
         </span>
+      </div>
+
+      {/* Online users list - always visible */}
+      <div className="border-b border-onedark-selection bg-onedark-selection/10 px-3 py-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          {onlineUsers.map((user, idx) => (
+            <div
+              key={idx}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs ${
+                user === username
+                  ? 'bg-onedark-cyan/20 text-onedark-cyan'
+                  : 'bg-onedark-selection/60 text-onedark-foreground'
+              }`}
+            >
+              <Circle size={6} className="text-onedark-green fill-onedark-green animate-pulse" />
+              <span>{user === username ? 'You' : user}</span>
+            </div>
+          ))}
+          {onlineUsers.length === 0 && (
+            <span className="text-xs text-onedark-comment">No users online</span>
+          )}
+        </div>
       </div>
 
       {/* Messages */}

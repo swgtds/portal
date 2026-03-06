@@ -18,17 +18,27 @@ import AIChatPanel from '@/components/ai-chat-panel';
 import RoomChatPanel, { RoomChatMessage } from '@/components/room-chat-panel';
 import SplitMarkdownEditor from '@/components/split-markdown-editor';
 
-/** Generate a random guest name that persists for the session */
+/** Generate a random cute username that persists for the session */
 function getUsername(): string {
-  const key = 'portal_username';
+  const key = 'portal_username_v2'; // New key to force regeneration
   const stored = sessionStorage.getItem(key);
   if (stored) return stored;
-  const adjectives = ['Swift', 'Quiet', 'Bold', 'Calm', 'Bright', 'Dark', 'Fuzzy', 'Snappy'];
-  const nouns = ['Fox', 'Owl', 'Bee', 'Cat', 'Wolf', 'Bear', 'Lynx', 'Hawk'];
-  const name =
-    adjectives[Math.floor(Math.random() * adjectives.length)] +
-    nouns[Math.floor(Math.random() * nouns.length)] +
-    Math.floor(Math.random() * 100);
+  
+  const adjectives = [
+    'Calm', 'Cozy', 'Happy', 'Sleepy', 'Fluffy', 'Gentle', 'Sunny', 'Dreamy',
+    'Mellow', 'Snuggly', 'Cheerful', 'Peppy', 'Jolly', 'Breezy', 'Cuddly', 'Sweet',
+    'Peaceful', 'Tender', 'Bubbly', 'Warm', 'Soft', 'Fuzzy', 'Bouncy', 'Sparkly'
+  ];
+  const animals = [
+    'Bear', 'Panda', 'Bunny', 'Koala', 'Otter', 'Sloth', 'Kitty', 'Puppy',
+    'Fox', 'Owl', 'Deer', 'Penguin', 'Hedgehog', 'Hamster', 'Seal', 'Duck',
+    'Raccoon', 'Squirrel', 'Dolphin', 'Turtle', 'Lamb', 'Fawn', 'Cub', 'Pup'
+  ];
+  
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const animal = animals[Math.floor(Math.random() * animals.length)];
+  const name = `${adjective} ${animal}`;
+  
   sessionStorage.setItem(key, name);
   return name;
 }
@@ -65,6 +75,7 @@ const Room = () => {
   const [activeTab, setActiveTab] = useState<ChatTab>('room');
   const [roomMessages, setRoomMessages] = useState<RoomChatMessage[]>([]);
   const [unreadRoom, setUnreadRoom] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   const wsRef = useRef(null);
   const textareaRef = useRef(null);
@@ -103,8 +114,9 @@ const Room = () => {
         match === 'https://' ? 'wss://' : 'ws://'
       );
 
-      const ws = new WebSocket(`${wsURL}/ws?room=${roomId}`);
+      const ws = new WebSocket(`${wsURL}/ws?room=${roomId}&username=${encodeURIComponent(username)}`);
       wsRef.current = ws;
+      console.log('Connecting as:', username);
 
       let didReceiveOpen = false;
 
@@ -148,6 +160,9 @@ const Room = () => {
             requestAnimationFrame(() => { isUpdatingCodeFromWS.current = false; });
           } else if (data.type === 'pong') {
             // keep-alive
+          } else if (data.type === 'user_list') {
+            console.log('Received user list:', data.users);
+            setOnlineUsers(data.users || []);
           } else if (data.type === 'chat_message') {
             const isOwn = data.sender === username;
             setRoomMessages(prev => [
@@ -288,6 +303,9 @@ const Room = () => {
             <span className={`text-xs sm:text-sm font-medium flex-shrink-0 ${isBackendConnected ? 'text-onedark-green' : 'text-onedark-red'}`}>
               {isBackendConnected ? '● Connected' : '● Disconnected'}
             </span>
+            <span className="hidden md:flex items-center gap-1.5 text-xs text-onedark-comment bg-onedark-selection/50 px-2 py-1 rounded-md">
+              <span className="text-onedark-cyan">{username}</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -302,6 +320,11 @@ const Room = () => {
             >
               <Users size={14} />
               <span className="hidden sm:inline">Chat</span>
+              {onlineUsers.length > 0 && (
+                <span className="text-[10px] text-onedark-green ml-0.5">
+                  ({onlineUsers.length})
+                </span>
+              )}
               {unreadRoom > 0 && !(isPanelOpen && activeTab === 'room') && (
                 <span className="absolute -top-1 -right-1 bg-onedark-red text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
                   {unreadRoom > 9 ? '9+' : unreadRoom}
@@ -427,6 +450,7 @@ const Room = () => {
                     messages={roomMessages}
                     onSend={handleSendRoomChat}
                     username={username}
+                    onlineUsers={onlineUsers}
                   />
                 ) : (
                   <AIChatPanel

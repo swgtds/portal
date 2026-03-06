@@ -28,6 +28,7 @@ var upgrader = websocket.Upgrader{
 type Client struct {
 	conn     *websocket.Conn
 	lastPing time.Time
+	username string
 }
 
 type Room struct {
@@ -39,9 +40,11 @@ type Room struct {
 }
 
 type Message struct {
-	Type    string `json:"type"`
-	Content string `json:"content,omitempty"`
-	Sender  string `json:"sender,omitempty"`
+	Type     string   `json:"type"`
+	Content  string   `json:"content,omitempty"`
+	Sender   string   `json:"sender,omitempty"`
+	Username string   `json:"username,omitempty"`
+	Users    []string `json:"users,omitempty"`
 }
 
 var rooms = make(map[string]*Room)
@@ -102,9 +105,13 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	roomID := r.URL.Query().Get("room")
+	username := r.URL.Query().Get("username")
 	if roomID == "" {
 		http.Error(w, "Missing room ID", http.StatusBadRequest)
 		return
+	}
+	if username == "" {
+		username = "Anonymous"
 	}
 
 	roomsLock.Lock()
@@ -140,12 +147,16 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	client := &Client{
 		conn:     conn,
 		lastPing: time.Now(),
+		username: username,
 	}
 	room.clients[client] = true
 	room.lastActive = time.Now()
 	room.lock.Unlock()
 
-	log.Printf("Client joined room: %s", roomID)
+	log.Printf("Client %s joined room: %s", username, roomID)
+
+	// Broadcast updated user list to all clients
+	broadcastUserList(roomID)
 
 	// Set connection timeouts (more aggressive for cloud)
 	conn.SetReadDeadline(time.Now().Add(90 * time.Second))  // 90 seconds read timeout
@@ -180,6 +191,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			delete(room.clients, client)
 			room.lock.Unlock()
 			conn.Close()
+
+			// Broadcast updated user list after client leaves
+			broadcastUserList(roomID)
 
 			roomsLock.Lock()
 			if len(room.clients) == 0 {
@@ -266,6 +280,42 @@ func broadcastToRoom(roomID string, msg []byte) {
 	}
 
 	// Remove failed clients
+	for _, client := range toRemove {
+		delete(room.clients, client)
+	}
+}
+
+func broadcastUserList(roomID string) {
+	roomsLock.Lock()
+	room, exists := rooms[roomID]
+	roomsLock.Unlock()
+	if !exists {
+		return
+	}
+
+	room.lock.Lock()
+	defer room.lock.Unlock()
+
+	// Collect all usernames in the room
+	var users []string
+	for client := range room.clients {
+		users = append(users, client.username)
+	}
+
+	msg := Message{Type: "user_list", Users: users}
+	msgBytes, _ := json.Marshal(msg)
+
+	var toRemove []*Client
+	for client := range room.clients {
+		client.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		err := client.conn.WriteMessage(websocket.TextMessage, msgBytes)
+		if err != nil {
+			log.Printf("Write error to client: %v", err)
+			client.conn.Close()
+			toRemove = append(toRemove, client)
+		}
+	}
+
 	for _, client := range toRemove {
 		delete(room.clients, client)
 	}
