@@ -291,11 +291,11 @@ const Room = () => {
   };
 
   return (
-    <div className="min-h-screen bg-onedark-background p-2 flex flex-col">
-      <div className="max-w-[1800px] mx-auto w-full flex flex-col flex-1 gap-2">
+    <div className="h-screen max-h-screen bg-onedark-background p-2 flex flex-col overflow-hidden">
+      <div className="max-w-[1800px] mx-auto w-full flex flex-col flex-1 gap-2 min-h-0">
 
         {/* ── Toolbar ─────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center justify-between gap-2 flex-wrap flex-shrink-0">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <h1 className="text-base sm:text-xl font-semibold text-onedark-foreground truncate">
               Room <span className="text-onedark-blue font-mono">{roomId}</span>
@@ -379,10 +379,10 @@ const Room = () => {
         </div>
 
         {/* ── Editor + Panel layout ───────────────────────────────── */}
-        {/* Desktop: side-by-side. Mobile: editor on top, panel below as a sheet */}
-        <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-0">
-          {/* Editor */}
-          <div className={`${isPanelOpen ? 'lg:flex-1 min-w-0 h-[50vh] lg:h-auto' : 'w-full'}`}>
+        {/* Side-by-side on all screens, chat panel is smaller on mobile */}
+        <div className="flex flex-row gap-1 sm:gap-2 flex-1 min-h-0 overflow-hidden">
+          {/* Editor - takes remaining space */}
+          <div className={`${isPanelOpen ? 'flex-1 min-w-0' : 'w-full'} h-full`}>
             <SplitMarkdownEditor
               textValue={text}
               codeValue={code}
@@ -404,47 +404,42 @@ const Room = () => {
             />
           </div>
 
-          {/* Side Panel */}
+          {/* Side Panel - Sidebar on all screens, narrower on mobile */}
           {isPanelOpen && (
-            <div className="
-              lg:w-[420px] xl:w-[480px] flex-shrink-0
-              h-[55vh] lg:h-auto
-              lg:min-h-[700px] lg:max-h-[90vh]
-              flex flex-col
-            ">
-              {/* Tab switcher (only shown when panel is open) */}
-              <div className="flex rounded-t-lg border-2 border-b-0 border-onedark-selection overflow-hidden">
+            <div className="w-[140px] sm:w-[200px] md:w-[280px] lg:w-[380px] xl:w-[420px] flex-shrink-0 flex flex-col h-full overflow-hidden">
+              {/* Tab switcher */}
+              <div className="flex border-2 border-b-0 border-onedark-selection rounded-t-lg overflow-hidden flex-shrink-0">
                 <button
                   onClick={() => setActiveTab('room')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition-colors ${
                     activeTab === 'room'
                       ? 'bg-onedark-selection/60 text-onedark-green border-b-2 border-onedark-green'
                       : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
                   }`}
                 >
-                  <Users size={13} />
-                  Room Chat
+                  <Users size={11} className="sm:w-3 sm:h-3" />
+                  <span className="hidden sm:inline">Room</span>
                   {unreadRoom > 0 && activeTab !== 'room' && (
-                    <span className="bg-onedark-red text-white text-[9px] font-bold rounded-full min-w-[15px] h-3.5 flex items-center justify-center px-1">
+                    <span className="bg-onedark-red text-white text-[8px] font-bold rounded-full min-w-[14px] h-3.5 flex items-center justify-center px-0.5">
                       {unreadRoom > 9 ? '9+' : unreadRoom}
                     </span>
                   )}
                 </button>
                 <button
                   onClick={() => setActiveTab('ai')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition-colors ${
                     activeTab === 'ai'
                       ? 'bg-onedark-selection/60 text-onedark-blue border-b-2 border-onedark-blue'
                       : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
                   }`}
                 >
-                  <Bot size={13} />
-                  AI Chat
+                  <Bot size={11} className="sm:w-3 sm:h-3" />
+                  <span className="hidden sm:inline">AI</span>
                 </button>
               </div>
 
-              {/* Panel content — fills remaining height */}
-              <div className="flex-1 min-h-0 [&>div]:rounded-t-none [&>div]:border-t-0">
+              {/* Panel content */}
+              <div className="flex-1 min-h-0 overflow-hidden [&>div]:rounded-t-none [&>div]:border-t-0 [&>div]:h-full">
                 {activeTab === 'room' ? (
                   <RoomChatPanel
                     messages={roomMessages}
@@ -465,7 +460,7 @@ const Room = () => {
         </div>
 
         {/* ── Footer ──────────────────────────────────────────────── */}
-        <div className="flex justify-end">
+        <div className="flex justify-end flex-shrink-0">
           <Button
             onClick={() => {
               setText('');

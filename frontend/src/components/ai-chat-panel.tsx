@@ -110,7 +110,7 @@ const AIChatPanel = ({ text, onInsertToEditor, onInsertCodeOnly }: AIChatPanelPr
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -134,31 +134,31 @@ const AIChatPanel = ({ text, onInsertToEditor, onInsertCodeOnly }: AIChatPanelPr
   return (
     <div className="flex flex-col h-full bg-onedark-background border-2 border-onedark-selection rounded-lg shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-onedark-selection bg-onedark-selection/40 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Bot size={15} className="text-onedark-purple" />
-          <span className="text-sm font-medium text-onedark-foreground">AI Chat</span>
+      <div className="flex items-center justify-between px-2.5 py-2 border-b border-onedark-selection bg-onedark-selection/40 flex-shrink-0">
+        <div className="flex items-center gap-1.5">
+          <Bot size={16} className="text-onedark-purple" />
+          <span className="text-xs sm:text-sm font-medium text-onedark-foreground">AI Chat</span>
         </div>
         {chatMessages.length > 0 && (
           <Button
             variant="ghost"
             size="sm"
             onClick={clearChat}
-            className="h-7 px-2 text-onedark-red hover:bg-onedark-red/10 hover:text-onedark-red"
+            className="h-6 px-2 text-[11px] text-onedark-red hover:bg-onedark-red/10 hover:text-onedark-red"
           >
-            <Trash2 size={13} className="mr-1" />
+            <Trash2 size={12} className="mr-1" />
             Clear
           </Button>
         )}
       </div>
 
       {/* Messages */}
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-2 space-y-2">
         {chatMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-onedark-comment">
-            <div className="text-center py-8">
-              <Bot size={40} className="mx-auto mb-3 opacity-40" />
-              <p className="text-sm">Ask anything — I can see your editor context.</p>
+            <div className="text-center py-4">
+              <Bot size={28} className="mx-auto mb-2 opacity-40" />
+              <p className="text-xs sm:text-sm px-2">Ask anything — I can see your editor context.</p>
             </div>
           </div>
         ) : (
@@ -174,12 +174,12 @@ const AIChatPanel = ({ text, onInsertToEditor, onInsertCodeOnly }: AIChatPanelPr
         )}
 
         {isGenerating && (
-          <div className="flex gap-3 p-3 bg-onedark-background border border-onedark-comment/30 rounded-lg">
-            <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-onedark-purple">
-              <Bot size={14} className="text-white" />
+          <div className="flex gap-2 p-2 bg-onedark-background border border-onedark-comment/30 rounded-lg">
+            <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-onedark-purple">
+              <Bot size={12} className="text-white" />
             </div>
-            <div className="flex items-center gap-2 text-onedark-comment text-sm">
-              <div className="animate-spin h-3.5 w-3.5 border-2 border-onedark-blue border-t-transparent rounded-full" />
+            <div className="flex items-center gap-2 text-onedark-comment text-xs sm:text-sm">
+              <div className="animate-spin h-3 w-3 border-2 border-onedark-blue border-t-transparent rounded-full" />
               Thinking…
             </div>
           </div>
@@ -187,22 +187,24 @@ const AIChatPanel = ({ text, onInsertToEditor, onInsertCodeOnly }: AIChatPanelPr
       </div>
 
       {/* Input */}
-      <div className="border-t border-onedark-comment/30 p-3 flex-shrink-0">
-        <div className="flex gap-2">
-          <Textarea
+      <div className="border-t border-onedark-comment/30 p-2 flex-shrink-0">
+        <div className="flex gap-1.5">
+          <input
+            type="text"
             value={aiPrompt}
             onChange={e => setAiPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask something… (Enter to send, Shift+Enter for newline)"
-            className="bg-onedark-selection border-onedark-comment/50 text-onedark-foreground placeholder:text-onedark-comment focus:ring-onedark-blue focus:border-transparent min-h-[70px] resize-none text-sm"
+            placeholder="Ask something…"
+            className="flex-1 min-w-0 bg-onedark-selection border border-onedark-comment/50 text-onedark-foreground placeholder:text-onedark-comment focus:ring-1 focus:ring-onedark-blue focus:border-transparent text-xs sm:text-sm rounded px-2.5 py-1.5"
             disabled={isGenerating}
           />
           <Button
             onClick={handleSendMessage}
             disabled={!aiPrompt.trim() || isGenerating}
-            className="bg-onedark-blue hover:bg-onedark-blue/80 text-white self-end"
+            size="sm"
+            className="bg-onedark-blue hover:bg-onedark-blue/80 text-white h-7 w-7 sm:h-8 sm:w-8 p-0 flex-shrink-0"
           >
-            <Send size={15} />
+            <Send size={14} />
           </Button>
         </div>
       </div>

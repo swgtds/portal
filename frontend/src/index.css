@@ -81,6 +81,15 @@
   .blur-3xl {
     filter: blur(64px);
   }
+  
+  /* Safe area padding for iOS devices */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
 }
 
 /* Markdown prose styling for One Dark theme */
