@@ -324,6 +324,7 @@ const Room = () => {
                   wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
                 }
               }}
+              storageKey={roomId}
               textareaRef={textareaRef}
               placeholder="Start typing… "
             />

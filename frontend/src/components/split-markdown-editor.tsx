@@ -34,6 +34,8 @@ const LANGUAGES = [
 
 type LanguageId = (typeof LANGUAGES)[number]['id'];
 
+const VALID_LANGUAGES = LANGUAGES.map(l => l.id) as string[];
+
 function getLanguageExtension(lang: LanguageId) {
   switch (lang) {
     case 'javascript':  return javascript({ jsx: true });
@@ -48,9 +50,30 @@ function getLanguageExtension(lang: LanguageId) {
   }
 }
 
+// ── localStorage helpers ─────────────────────────────────────────
+function lsGet<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function lsSet(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore quota errors
+  }
+}
+
 interface SplitMarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
+  /** Namespace for persisted editor prefs (e.g. roomId). Defaults to 'global'. */
+  storageKey?: string;
   /** kept for API compatibility – no longer used */
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
   placeholder?: string;
@@ -73,10 +96,30 @@ const baseTheme = EditorView.theme({
 const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
   value,
   onChange,
+  storageKey = 'global',
   placeholder = 'Start typing…',
 }) => {
-  const [mode, setMode] = useState<EditorMode>('text');
-  const [language, setLanguage] = useState<LanguageId>('javascript');
+  const modeKey = `editor_mode_${storageKey}`;
+  const langKey  = `editor_lang_${storageKey}`;
+
+  const [mode, setModeRaw] = useState<EditorMode>(() =>
+    lsGet<EditorMode>(modeKey, 'text') === 'code' ? 'code' : 'text'
+  );
+
+  const [language, setLanguageRaw] = useState<LanguageId>(() => {
+    const stored = lsGet<string>(langKey, 'javascript');
+    return VALID_LANGUAGES.includes(stored) ? (stored as LanguageId) : 'javascript';
+  });
+
+  const setMode = (m: EditorMode) => {
+    setModeRaw(m);
+    lsSet(modeKey, m);
+  };
+
+  const setLanguage = (l: LanguageId) => {
+    setLanguageRaw(l);
+    lsSet(langKey, l);
+  };
 
   const extensions = useMemo(() => {
     const lang = mode === 'text' ? markdown() : getLanguageExtension(language);
