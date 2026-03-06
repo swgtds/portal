@@ -70,8 +70,10 @@ function lsSet(key: string, value: unknown) {
 }
 
 interface SplitMarkdownEditorProps {
-  value: string;
-  onChange: (value: string) => void;
+  textValue: string;
+  codeValue: string;
+  onTextChange: (value: string) => void;
+  onCodeChange: (value: string) => void;
   /** Namespace for persisted editor prefs (e.g. roomId). Defaults to 'global'. */
   storageKey?: string;
   /** kept for API compatibility – no longer used */
@@ -94,8 +96,10 @@ const baseTheme = EditorView.theme({
 });
 
 const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
-  value,
-  onChange,
+  textValue,
+  codeValue,
+  onTextChange,
+  onCodeChange,
   storageKey = 'global',
   placeholder = 'Start typing…',
 }) => {
@@ -198,8 +202,8 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
       {/* ── Editor ───────────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden">
         <CodeMirror
-          value={value}
-          onChange={onChange}
+          value={mode === 'text' ? textValue : codeValue}
+          onChange={mode === 'text' ? onTextChange : onCodeChange}
           extensions={extensions}
           theme={oneDark}
           placeholder={placeholder}

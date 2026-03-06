@@ -42,6 +42,7 @@ const Room = () => {
 
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [text, setText] = useState('');
+  const [code, setCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ChatTab>('room');
@@ -101,6 +102,10 @@ const Room = () => {
           if (data.type === 'text_update') {
             isUpdatingFromWS.current = true;
             setText(data.content);
+            setTimeout(() => { isUpdatingFromWS.current = false; }, 0);
+          } else if (data.type === 'code_update') {
+            isUpdatingFromWS.current = true;
+            setCode(data.content);
             setTimeout(() => { isUpdatingFromWS.current = false; }, 0);
           } else if (data.type === 'pong') {
             // keep-alive
@@ -207,12 +212,12 @@ const Room = () => {
     }
     if (codeSnippets.length > 0) {
       const codeToInsert = codeSnippets.join('\n\n');
-      const newText = text + (text ? '\n\n' : '') + codeToInsert;
-      setText(newText);
+      const newCode = code + (code ? '\n\n' : '') + codeToInsert;
+      setCode(newCode);
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
+        wsRef.current.send(JSON.stringify({ type: 'code_update', content: newCode }));
       }
-      toast({ title: 'Code Snippets Inserted', description: `${codeSnippets.length} snippet(s) added` });
+      toast({ title: 'Code Snippets Inserted', description: `${codeSnippets.length} snippet(s) added to Code editor` });
     } else {
       toast({ title: 'No Code Found', description: 'No code blocks found in this response', variant: 'destructive' });
     }
@@ -317,11 +322,18 @@ const Room = () => {
           {/* Editor */}
           <div className={`${isPanelOpen ? 'lg:flex-1 min-w-0 h-[50vh] lg:h-auto' : 'w-full'}`}>
             <SplitMarkdownEditor
-              value={text}
-              onChange={(newText) => {
+              textValue={text}
+              codeValue={code}
+              onTextChange={(newText) => {
                 setText(newText);
                 if (!isUpdatingFromWS.current && wsRef.current?.readyState === WebSocket.OPEN) {
                   wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
+                }
+              }}
+              onCodeChange={(newCode) => {
+                setCode(newCode);
+                if (!isUpdatingFromWS.current && wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'code_update', content: newCode }));
                 }
               }}
               storageKey={roomId}
@@ -379,7 +391,7 @@ const Room = () => {
                   />
                 ) : (
                   <AIChatPanel
-                    text={text}
+                    text={text + (code ? '\n\n--- Code ---\n' + code : '')}
                     onInsertToEditor={handleInsertToEditor}
                     onInsertCodeOnly={handleInsertCodeOnly}
                   />
@@ -394,15 +406,17 @@ const Room = () => {
           <Button
             onClick={() => {
               setText('');
+              setCode('');
               if (wsRef.current?.readyState === WebSocket.OPEN) {
                 wsRef.current.send(JSON.stringify({ type: 'text_update', content: '' }));
+                wsRef.current.send(JSON.stringify({ type: 'code_update', content: '' }));
               }
-              toast({ title: 'Editor Cleared', description: 'All content has been deleted from the editor' });
+              toast({ title: 'Editor Cleared', description: 'All content has been deleted from both editors' });
             }}
             variant="outline"
             size="sm"
             className="border-onedark-red/50 bg-transparent hover:bg-onedark-red/10 text-onedark-red"
-            disabled={!text.trim()}
+            disabled={!text.trim() && !code.trim()}
           >
             <Trash2 className="mr-1.5 h-4 w-4" />
             Delete All

@@ -31,10 +31,11 @@ type Client struct {
 }
 
 type Room struct {
-	clients    map[*Client]bool
-	content    string
-	lastActive time.Time
-	lock       sync.Mutex
+	clients     map[*Client]bool
+	content     string
+	codeContent string
+	lastActive  time.Time
+	lock        sync.Mutex
 }
 
 type Message struct {
@@ -126,7 +127,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		msg := Message{Type: "text_update", Content: room.content}
 		msgBytes, _ := json.Marshal(msg)
 		if err := conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
-			log.Println("Failed to send initial content to client:", err)
+			log.Println("Failed to send initial text content to client:", err)
+		}
+	}
+	if room.codeContent != "" {
+		msg := Message{Type: "code_update", Content: room.codeContent}
+		msgBytes, _ := json.Marshal(msg)
+		if err := conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
+			log.Println("Failed to send initial code content to client:", err)
 		}
 	}
 	client := &Client{
@@ -213,6 +221,12 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			case "text_update":
 				room.lock.Lock()
 				room.content = msg.Content
+				room.lastActive = time.Now()
+				room.lock.Unlock()
+				broadcastToRoom(roomID, msgBytes)
+			case "code_update":
+				room.lock.Lock()
+				room.codeContent = msg.Content
 				room.lastActive = time.Now()
 				room.lock.Unlock()
 				broadcastToRoom(roomID, msgBytes)
