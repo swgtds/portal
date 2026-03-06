@@ -246,6 +246,27 @@ const Room = () => {
 
   const handleShareRoom = async () => {
     const roomUrl = `${window.location.origin}/room/${roomId}`;
+    const shareData = {
+      title: 'Portal - Collaborative Room',
+      text: `🚀 Join my room - Get into the madness portal!\n\nRoom Code: ${roomId}`,
+      url: roomUrl,
+    };
+
+    // Try native share API first (mobile)
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData);
+        toast({ title: 'Shared!', description: 'Room link shared successfully' });
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fall back to clipboard
+        if ((err as Error).name === 'AbortError') {
+          return; // User cancelled, don't show error
+        }
+      }
+    }
+
+    // Fallback: copy to clipboard
     try {
       await navigator.clipboard.writeText(roomUrl);
       setCopied(true);
