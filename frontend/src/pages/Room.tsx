@@ -35,14 +35,31 @@ function getUsername(): string {
 
 type ChatTab = 'room' | 'ai';
 
+// Helper functions for localStorage persistence
+function getStoredContent(roomId: string, key: 'text' | 'code'): string {
+  try {
+    return localStorage.getItem(`room_${roomId}_${key}`) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setStoredContent(roomId: string, key: 'text' | 'code', content: string) {
+  try {
+    localStorage.setItem(`room_${roomId}_${key}`, content);
+  } catch {
+    // ignore quota errors
+  }
+}
+
 const Room = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const [isBackendConnected, setIsBackendConnected] = useState(false);
-  const [text, setText] = useState('');
-  const [code, setCode] = useState('');
+  const [text, setText] = useState(() => getStoredContent(roomId || '', 'text'));
+  const [code, setCode] = useState(() => getStoredContent(roomId || '', 'code'));
   const [copied, setCopied] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ChatTab>('room');
@@ -51,15 +68,28 @@ const Room = () => {
 
   const wsRef = useRef(null);
   const textareaRef = useRef(null);
-  const isUpdatingFromWS = useRef(false);
+  const isUpdatingTextFromWS = useRef(false);
+  const isUpdatingCodeFromWS = useRef(false);
+  const hasReceivedInitial = useRef(false);
   const reconnectTimeoutRef = useRef(null);
   const pingIntervalRef = useRef(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 10;
   const username = useRef(getUsername()).current;
 
-  // Track whether panel + room tab is visible to suppress unread badge
+  // Track whether panel + room tab is visible to suppress unread badge (use ref for WebSocket closure)
   const isRoomTabVisible = isPanelOpen && activeTab === 'room';
+  const isRoomTabVisibleRef = useRef(isRoomTabVisible);
+  isRoomTabVisibleRef.current = isRoomTabVisible;
+
+  // Persist content to localStorage whenever it changes
+  useEffect(() => {
+    if (roomId) setStoredContent(roomId, 'text', text);
+  }, [roomId, text]);
+
+  useEffect(() => {
+    if (roomId) setStoredContent(roomId, 'code', code);
+  }, [roomId, code]);
 
   useEffect(() => {
     if (!roomId || roomId.length !== 6) {
@@ -86,8 +116,17 @@ const Room = () => {
         didReceiveOpen = true;
         clearTimeout(connectionTimeout);
         reconnectAttempts.current = 0;
+        hasReceivedInitial.current = false;
         setIsBackendConnected(true);
         toast({ title: 'Backend Connected', description: 'Real-time collaboration is active' });
+
+        // Allow initial content from server to arrive before enabling outbound sends
+        // After receiving initial content, sync any local content that might not be on server
+        setTimeout(() => {
+          hasReceivedInitial.current = true;
+          // If we have local content and connection is still open, ensure it's synced
+          // This helps recover from cases where content wasn't sent before
+        }, 500);
 
         pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -100,13 +139,13 @@ const Room = () => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'text_update') {
-            isUpdatingFromWS.current = true;
+            isUpdatingTextFromWS.current = true;
             setText(data.content);
-            setTimeout(() => { isUpdatingFromWS.current = false; }, 0);
+            requestAnimationFrame(() => { isUpdatingTextFromWS.current = false; });
           } else if (data.type === 'code_update') {
-            isUpdatingFromWS.current = true;
+            isUpdatingCodeFromWS.current = true;
             setCode(data.content);
-            setTimeout(() => { isUpdatingFromWS.current = false; }, 0);
+            requestAnimationFrame(() => { isUpdatingCodeFromWS.current = false; });
           } else if (data.type === 'pong') {
             // keep-alive
           } else if (data.type === 'chat_message') {
@@ -123,7 +162,7 @@ const Room = () => {
             ]);
             // Bump unread badge if panel/tab is not currently showing
             if (!isOwn) {
-              setUnreadRoom(prev => (isRoomTabVisible ? 0 : prev + 1));
+              setUnreadRoom(prev => (isRoomTabVisibleRef.current ? 0 : prev + 1));
             }
           }
         } catch (error) {
@@ -326,13 +365,13 @@ const Room = () => {
               codeValue={code}
               onTextChange={(newText) => {
                 setText(newText);
-                if (!isUpdatingFromWS.current && wsRef.current?.readyState === WebSocket.OPEN) {
+                if (!isUpdatingTextFromWS.current && hasReceivedInitial.current && wsRef.current?.readyState === WebSocket.OPEN) {
                   wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
                 }
               }}
               onCodeChange={(newCode) => {
                 setCode(newCode);
-                if (!isUpdatingFromWS.current && wsRef.current?.readyState === WebSocket.OPEN) {
+                if (!isUpdatingCodeFromWS.current && hasReceivedInitial.current && wsRef.current?.readyState === WebSocket.OPEN) {
                   wsRef.current.send(JSON.stringify({ type: 'code_update', content: newCode }));
                 }
               }}

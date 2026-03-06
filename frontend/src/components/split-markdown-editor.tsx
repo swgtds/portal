@@ -125,10 +125,13 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
     lsSet(langKey, l);
   };
 
-  const extensions = useMemo(() => {
-    const lang = mode === 'text' ? markdown() : getLanguageExtension(language);
-    return [lang, baseTheme];
-  }, [mode, language]);
+  const textExtensions = useMemo(() => {
+    return [markdown(), baseTheme];
+  }, []);
+
+  const codeExtensions = useMemo(() => {
+    return [getLanguageExtension(language), baseTheme];
+  }, [language]);
 
   const currentLangLabel = LANGUAGES.find(l => l.id === language)?.label ?? 'JavaScript';
 
@@ -200,26 +203,51 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
       </div>
 
       {/* ── Editor ───────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden">
-        <CodeMirror
-          value={mode === 'text' ? textValue : codeValue}
-          onChange={mode === 'text' ? onTextChange : onCodeChange}
-          extensions={extensions}
-          theme={oneDark}
-          placeholder={placeholder}
-          basicSetup={{
-            lineNumbers: mode === 'code',
-            foldGutter: mode === 'code',
-            highlightActiveLine: true,
-            highlightSelectionMatches: true,
-            autocompletion: mode === 'code',
-            bracketMatching: true,
-            closeBrackets: true,
-            indentOnInput: true,
-            tabSize: 2,
-          }}
-          style={{ height: '100%' }}
-        />
+      <div className="flex-1 overflow-hidden relative">
+        {/* Text editor – always mounted, hidden when in code mode */}
+        <div style={{ height: '100%', display: mode === 'text' ? 'block' : 'none' }}>
+          <CodeMirror
+            value={textValue}
+            onChange={onTextChange}
+            extensions={textExtensions}
+            theme={oneDark}
+            placeholder={placeholder}
+            basicSetup={{
+              lineNumbers: false,
+              foldGutter: false,
+              highlightActiveLine: true,
+              highlightSelectionMatches: true,
+              autocompletion: false,
+              bracketMatching: true,
+              closeBrackets: true,
+              indentOnInput: true,
+              tabSize: 2,
+            }}
+            style={{ height: '100%' }}
+          />
+        </div>
+        {/* Code editor – always mounted, hidden when in text mode */}
+        <div style={{ height: '100%', display: mode === 'code' ? 'block' : 'none' }}>
+          <CodeMirror
+            value={codeValue}
+            onChange={onCodeChange}
+            extensions={codeExtensions}
+            theme={oneDark}
+            placeholder={placeholder}
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              highlightActiveLine: true,
+              highlightSelectionMatches: true,
+              autocompletion: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              indentOnInput: true,
+              tabSize: 2,
+            }}
+            style={{ height: '100%' }}
+          />
+        </div>
       </div>
     </div>
   );
