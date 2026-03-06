@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import AIChatPanel from '@/components/ai-chat-panel';
 import RoomChatPanel, { RoomChatMessage } from '@/components/room-chat-panel';
 import SplitMarkdownEditor from '@/components/split-markdown-editor';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 /** Generate a random cute username that persists for the session */
 function getUsername(): string {
@@ -379,85 +380,97 @@ const Room = () => {
         </div>
 
         {/* ── Editor + Panel layout ───────────────────────────────── */}
-        {/* Side-by-side on all screens, chat panel is smaller on mobile */}
-        <div className="flex flex-row gap-1 sm:gap-2 flex-1 min-h-0 overflow-hidden">
-          {/* Editor - takes remaining space */}
-          <div className={`${isPanelOpen ? 'flex-1 min-w-0' : 'w-full'} h-full`}>
-            <SplitMarkdownEditor
-              textValue={text}
-              codeValue={code}
-              onTextChange={(newText) => {
-                setText(newText);
-                if (!isUpdatingTextFromWS.current && hasReceivedInitial.current && wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
-                }
-              }}
-              onCodeChange={(newCode) => {
-                setCode(newCode);
-                if (!isUpdatingCodeFromWS.current && hasReceivedInitial.current && wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'code_update', content: newCode }));
-                }
-              }}
-              storageKey={roomId}
-              textareaRef={textareaRef}
-              placeholder="Start typing… "
-            />
-          </div>
-
-          {/* Side Panel - Sidebar on all screens, narrower on mobile */}
-          {isPanelOpen && (
-            <div className="w-[140px] sm:w-[200px] md:w-[280px] lg:w-[380px] xl:w-[420px] flex-shrink-0 flex flex-col h-full overflow-hidden">
-              {/* Tab switcher */}
-              <div className="flex border-2 border-b-0 border-onedark-selection rounded-t-lg overflow-hidden flex-shrink-0">
-                <button
-                  onClick={() => setActiveTab('room')}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition-colors ${
-                    activeTab === 'room'
-                      ? 'bg-onedark-selection/60 text-onedark-green border-b-2 border-onedark-green'
-                      : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
-                  }`}
-                >
-                  <Users size={11} className="sm:w-3 sm:h-3" />
-                  <span className="hidden sm:inline">Room</span>
-                  {unreadRoom > 0 && activeTab !== 'room' && (
-                    <span className="bg-onedark-red text-white text-[8px] font-bold rounded-full min-w-[14px] h-3.5 flex items-center justify-center px-0.5">
-                      {unreadRoom > 9 ? '9+' : unreadRoom}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setActiveTab('ai')}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition-colors ${
-                    activeTab === 'ai'
-                      ? 'bg-onedark-selection/60 text-onedark-blue border-b-2 border-onedark-blue'
-                      : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
-                  }`}
-                >
-                  <Bot size={11} className="sm:w-3 sm:h-3" />
-                  <span className="hidden sm:inline">AI</span>
-                </button>
-              </div>
-
-              {/* Panel content */}
-              <div className="flex-1 min-h-0 overflow-hidden [&>div]:rounded-t-none [&>div]:border-t-0 [&>div]:h-full">
-                {activeTab === 'room' ? (
-                  <RoomChatPanel
-                    messages={roomMessages}
-                    onSend={handleSendRoomChat}
-                    username={username}
-                    onlineUsers={onlineUsers}
-                  />
-                ) : (
-                  <AIChatPanel
-                    text={text + (code ? '\n\n--- Code ---\n' + code : '')}
-                    onInsertToEditor={handleInsertToEditor}
-                    onInsertCodeOnly={handleInsertCodeOnly}
-                  />
-                )}
-              </div>
+        {/* Resizable panels - drag the handle to adjust sizes */}
+        <PanelGroup direction="horizontal" className="flex-1 min-h-0 overflow-hidden gap-1">
+          {/* Editor Panel */}
+          <Panel defaultSize={isPanelOpen ? 70 : 100} minSize={30}>
+            <div className="h-full">
+              <SplitMarkdownEditor
+                textValue={text}
+                codeValue={code}
+                onTextChange={(newText) => {
+                  setText(newText);
+                  if (!isUpdatingTextFromWS.current && hasReceivedInitial.current && wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'text_update', content: newText }));
+                  }
+                }}
+                onCodeChange={(newCode) => {
+                  setCode(newCode);
+                  if (!isUpdatingCodeFromWS.current && hasReceivedInitial.current && wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'code_update', content: newCode }));
+                  }
+                }}
+                storageKey={roomId}
+                textareaRef={textareaRef}
+                placeholder="Start typing… "
+              />
             </div>
+          </Panel>
+
+          {/* Resize Handle + Chat Panel */}
+          {isPanelOpen && (
+            <>
+              {/* Drag Handle */}
+              <PanelResizeHandle className="w-2 sm:w-3 bg-onedark-selection/30 hover:bg-onedark-blue/50 active:bg-onedark-blue/70 transition-colors rounded-full mx-0.5 flex items-center justify-center group cursor-col-resize">
+                <div className="w-0.5 h-8 sm:h-12 bg-onedark-comment/50 group-hover:bg-onedark-blue group-active:bg-onedark-cyan rounded-full transition-colors" />
+              </PanelResizeHandle>
+
+              {/* Chat Panel */}
+              <Panel defaultSize={30} minSize={15} maxSize={60}>
+                <div className="flex flex-col h-full overflow-hidden">
+                  {/* Tab switcher */}
+                  <div className="flex border-2 border-b-0 border-onedark-selection rounded-t-lg overflow-hidden flex-shrink-0">
+                    <button
+                      onClick={() => setActiveTab('room')}
+                      className={`flex-1 flex items-center justify-center gap-1 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition-colors ${
+                        activeTab === 'room'
+                          ? 'bg-onedark-selection/60 text-onedark-green border-b-2 border-onedark-green'
+                          : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
+                      }`}
+                    >
+                      <Users size={11} className="sm:w-3 sm:h-3" />
+                      <span className="hidden sm:inline">Room</span>
+                      {unreadRoom > 0 && activeTab !== 'room' && (
+                        <span className="bg-onedark-red text-white text-[8px] font-bold rounded-full min-w-[14px] h-3.5 flex items-center justify-center px-0.5">
+                          {unreadRoom > 9 ? '9+' : unreadRoom}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('ai')}
+                      className={`flex-1 flex items-center justify-center gap-1 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition-colors ${
+                        activeTab === 'ai'
+                          ? 'bg-onedark-selection/60 text-onedark-blue border-b-2 border-onedark-blue'
+                          : 'bg-onedark-background/60 text-onedark-comment hover:text-onedark-foreground'
+                      }`}
+                    >
+                      <Bot size={11} className="sm:w-3 sm:h-3" />
+                      <span className="hidden sm:inline">AI</span>
+                    </button>
+                  </div>
+
+                  {/* Panel content */}
+                  <div className="flex-1 min-h-0 overflow-hidden [&>div]:rounded-t-none [&>div]:border-t-0 [&>div]:h-full">
+                    {activeTab === 'room' ? (
+                      <RoomChatPanel
+                        messages={roomMessages}
+                        onSend={handleSendRoomChat}
+                        username={username}
+                        onlineUsers={onlineUsers}
+                      />
+                    ) : (
+                      <AIChatPanel
+                        text={text + (code ? '\n\n--- Code ---\n' + code : '')}
+                        onInsertToEditor={handleInsertToEditor}
+                        onInsertCodeOnly={handleInsertCodeOnly}
+                      />
+                    )}
+                  </div>
+                </div>
+              </Panel>
+            </>
           )}
-        </div>
+        </PanelGroup>
 
         {/* ── Footer ──────────────────────────────────────────────── */}
         <div className="flex justify-end flex-shrink-0">
