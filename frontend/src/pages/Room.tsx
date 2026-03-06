@@ -16,7 +16,7 @@ import { Share, LogOut, Check, Trash2, Sparkles, MessageSquareOff, Users, Bot } 
 import { useToast } from '@/hooks/use-toast';
 import AIChatPanel from '@/components/ai-chat-panel';
 import RoomChatPanel, { RoomChatMessage } from '@/components/room-chat-panel';
-import SplitMarkdownEditor from '@/components/split-markdown-editor';
+import SplitMarkdownEditor, { LanguageId, VALID_LANGUAGES } from '@/components/split-markdown-editor';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 /** Generate a random cute username that persists for the session */
@@ -71,6 +71,7 @@ const Room = () => {
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [text, setText] = useState(() => getStoredContent(roomId || '', 'text'));
   const [code, setCode] = useState(() => getStoredContent(roomId || '', 'code'));
+  const [language, setLanguage] = useState<LanguageId>('javascript');
   const [copied, setCopied] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ChatTab>('room');
@@ -82,6 +83,7 @@ const Room = () => {
   const textareaRef = useRef(null);
   const isUpdatingTextFromWS = useRef(false);
   const isUpdatingCodeFromWS = useRef(false);
+  const isUpdatingLanguageFromWS = useRef(false);
   const hasReceivedInitial = useRef(false);
   const reconnectTimeoutRef = useRef(null);
   const pingIntervalRef = useRef(null);
@@ -159,6 +161,13 @@ const Room = () => {
             isUpdatingCodeFromWS.current = true;
             setCode(data.content);
             requestAnimationFrame(() => { isUpdatingCodeFromWS.current = false; });
+          } else if (data.type === 'language_update') {
+            // Sync language selection across all clients
+            if (data.language && VALID_LANGUAGES.includes(data.language)) {
+              isUpdatingLanguageFromWS.current = true;
+              setLanguage(data.language as LanguageId);
+              requestAnimationFrame(() => { isUpdatingLanguageFromWS.current = false; });
+            }
           } else if (data.type === 'pong') {
             // keep-alive
           } else if (data.type === 'user_list') {
@@ -277,6 +286,14 @@ const Room = () => {
       toast({ title: 'No Code Found', description: 'No code blocks found in this response', variant: 'destructive' });
     }
   };
+
+  const handleLanguageChange = useCallback((newLanguage: LanguageId) => {
+    setLanguage(newLanguage);
+    // Broadcast to other clients if not from WS
+    if (!isUpdatingLanguageFromWS.current && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'language_update', language: newLanguage }));
+    }
+  }, []);
 
   const handleSendRoomChat = useCallback((msg: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -400,6 +417,8 @@ const Room = () => {
                     wsRef.current.send(JSON.stringify({ type: 'code_update', content: newCode }));
                   }
                 }}
+                language={language}
+                onLanguageChange={handleLanguageChange}
                 storageKey={roomId}
                 textareaRef={textareaRef}
                 placeholder="Start typing… "

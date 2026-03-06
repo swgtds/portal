@@ -32,9 +32,9 @@ const LANGUAGES = [
   { id: 'css',        label: 'CSS'        },
 ] as const;
 
-type LanguageId = (typeof LANGUAGES)[number]['id'];
+export type LanguageId = (typeof LANGUAGES)[number]['id'];
 
-const VALID_LANGUAGES = LANGUAGES.map(l => l.id) as string[];
+export const VALID_LANGUAGES = LANGUAGES.map(l => l.id) as string[];
 
 function getLanguageExtension(lang: LanguageId) {
   switch (lang) {
@@ -74,6 +74,10 @@ interface SplitMarkdownEditorProps {
   codeValue: string;
   onTextChange: (value: string) => void;
   onCodeChange: (value: string) => void;
+  /** Controlled language - if provided, syncs from parent */
+  language?: LanguageId;
+  /** Called when language changes - used for syncing across clients */
+  onLanguageChange?: (language: LanguageId) => void;
   /** Namespace for persisted editor prefs (e.g. roomId). Defaults to 'global'. */
   storageKey?: string;
   /** kept for API compatibility – no longer used */
@@ -100,6 +104,8 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
   codeValue,
   onTextChange,
   onCodeChange,
+  language: controlledLanguage,
+  onLanguageChange,
   storageKey = 'global',
   placeholder = 'Start typing…',
 }) => {
@@ -110,10 +116,13 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
     lsGet<EditorMode>(modeKey, 'text') === 'code' ? 'code' : 'text'
   );
 
-  const [language, setLanguageRaw] = useState<LanguageId>(() => {
+  const [internalLanguage, setInternalLanguage] = useState<LanguageId>(() => {
     const stored = lsGet<string>(langKey, 'javascript');
     return VALID_LANGUAGES.includes(stored) ? (stored as LanguageId) : 'javascript';
   });
+
+  // Use controlled language if provided, otherwise use internal state
+  const language = controlledLanguage ?? internalLanguage;
 
   const setMode = (m: EditorMode) => {
     setModeRaw(m);
@@ -121,8 +130,10 @@ const SplitMarkdownEditor: React.FC<SplitMarkdownEditorProps> = ({
   };
 
   const setLanguage = (l: LanguageId) => {
-    setLanguageRaw(l);
+    setInternalLanguage(l);
     lsSet(langKey, l);
+    // Notify parent for syncing
+    onLanguageChange?.(l);
   };
 
   const textExtensions = useMemo(() => {
