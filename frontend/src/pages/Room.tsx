@@ -12,9 +12,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
-import { Share, LogOut, Copy, Check, Trash2 } from 'lucide-react';
+import { Share, LogOut, Check, Trash2, Sparkles, MessageSquareOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import AIChatDialog from '@/components/ai-chat-dialog';
+import AIChatPanel from '@/components/ai-chat-panel';
 import SplitMarkdownEditor from '@/components/split-markdown-editor';
 
 const Room = () => {
@@ -25,7 +25,7 @@ const Room = () => {
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
-  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const wsRef = useRef(null);
   const textareaRef = useRef(null);
   const isUpdatingFromWS = useRef(false);
@@ -249,7 +249,8 @@ const Room = () => {
 
   return (
     <div className="min-h-screen bg-onedark-background p-2">
-      <div className="max-w-6xl mx-auto space-y-2">
+      <div className="max-w-[1800px] mx-auto space-y-2">
+        {/* ── Toolbar ─────────────────────────────────────────────── */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 min-w-0">
             <h1 className="text-xl font-semibold text-onedark-foreground truncate">
@@ -265,13 +266,28 @@ const Room = () => {
           </div>
 
           <div className="flex items-center space-x-2">
-            <AIChatDialog 
-              isOpen={isAIChatOpen}
-              onOpenChange={setIsAIChatOpen}
-              text={text}
-              onInsertToEditor={handleInsertToEditor}
-              onInsertCodeOnly={handleInsertCodeOnly}
-            />
+            {/* AI Chat toggle */}
+            <button
+              onClick={() => setIsChatOpen(prev => !prev)}
+              className={`group relative overflow-hidden rounded-md px-3 py-2 sm:px-4 sm:py-2 transition-all duration-300 transform hover:scale-105 shadow-lg ${
+                isChatOpen
+                  ? 'bg-onedark-selection border border-onedark-blue/60 text-onedark-blue'
+                  : 'bg-gradient-to-r from-onedark-blue via-onedark-purple to-onedark-cyan text-white'
+              }`}
+            >
+              {!isChatOpen && (
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              )}
+              <div className="relative flex items-center text-xs sm:text-sm font-medium gap-1.5">
+                {isChatOpen ? (
+                  <MessageSquareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                )}
+                <span className="hidden xs:inline">{isChatOpen ? 'Close Chat' : 'AI Chat'}</span>
+                <span className="xs:hidden">AI</span>
+              </div>
+            </button>
 
             <Button
               onClick={handleShareRoom}
@@ -319,53 +335,62 @@ const Room = () => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <SplitMarkdownEditor
-            value={text}
-            onChange={(newText) => {
-              setText(newText);
-              
-              if (
-                !isUpdatingFromWS.current &&
-                wsRef.current &&
-                wsRef.current.readyState === WebSocket.OPEN
-              ) {
-                wsRef.current.send(
-                  JSON.stringify({
-                    type: 'text_update',
-                    content: newText,
-                  })
-                );
-              }
-            }}
-            textareaRef={textareaRef}
-            placeholder="Start typing... "
-          />
-          
-          <div className="flex justify-end">
-            <Button
-              onClick={() => {
-                setText('');
-                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({
-                    type: 'text_update',
-                    content: ''
-                  }));
+        {/* ── Editor + Chat layout ────────────────────────────────── */}
+        <div className={`flex gap-3 ${isChatOpen ? 'flex-col lg:flex-row' : ''}`}>
+          {/* Editor */}
+          <div className={isChatOpen ? 'lg:flex-1 min-w-0' : 'w-full'}>
+            <SplitMarkdownEditor
+              value={text}
+              onChange={(newText) => {
+                setText(newText);
+                if (
+                  !isUpdatingFromWS.current &&
+                  wsRef.current &&
+                  wsRef.current.readyState === WebSocket.OPEN
+                ) {
+                  wsRef.current.send(
+                    JSON.stringify({ type: 'text_update', content: newText })
+                  );
                 }
-                toast({
-                  title: "Editor Cleared",
-                  description: "All content has been deleted from the editor",
-                });
               }}
-              variant="outline"
-              size="sm"
-              className="border-onedark-red/50 bg-transparent hover:bg-onedark-red/10 text-onedark-red"
-              disabled={!text.trim()}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete All
-            </Button>
+              textareaRef={textareaRef}
+              placeholder="Start typing… "
+            />
           </div>
+
+          {/* Chat Panel */}
+          {isChatOpen && (
+            <div className="lg:w-[420px] xl:w-[480px] flex-shrink-0 h-[85vh] min-h-[700px] max-h-[90vh]">
+              <AIChatPanel
+                text={text}
+                onInsertToEditor={handleInsertToEditor}
+                onInsertCodeOnly={handleInsertCodeOnly}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer actions ──────────────────────────────────────── */}
+        <div className="flex justify-end">
+          <Button
+            onClick={() => {
+              setText('');
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: 'text_update', content: '' }));
+              }
+              toast({
+                title: 'Editor Cleared',
+                description: 'All content has been deleted from the editor',
+              });
+            }}
+            variant="outline"
+            size="sm"
+            className="border-onedark-red/50 bg-transparent hover:bg-onedark-red/10 text-onedark-red"
+            disabled={!text.trim()}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete All
+          </Button>
         </div>
       </div>
     </div>
